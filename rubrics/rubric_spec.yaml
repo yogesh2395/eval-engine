@@ -1,0 +1,172 @@
+# rubric_spec.yaml
+#
+# Spec-only document. No scoring logic, no code, no parsers, no LLM prompt
+# templates live here. This file defines the contract and rubric that a
+# (separately implemented) scorer must satisfy when grading a consultant's
+# diagnostic response to the fixed OPEX scenario below.
+
+scenario: >
+  A company is facing high OPEX costs, far exceeding budget, across distinct
+  cost centers: storage & handling, selling & marketing, and logistics.
+  A consultant is asked to diagnose and recommend solutions.
+
+io_shape:
+  input:
+    prompt:
+      type: string
+      description: >
+        The business problem statement given to the consultant (the OPEX
+        scenario above, or a variant of it).
+    response:
+      type: string
+      description: >
+        The consultant's full diagnostic response to be scored.
+  output:
+    overall_score:
+      type: integer
+      range: [1, 5]
+      description: >
+        A single holistic score for the response, expected to be consistent
+        with (e.g. a weighted or rounded function of) the three
+        criterion_scores, though the exact aggregation method is left to the
+        scorer implementation, not this spec.
+    justification:
+      type: string
+      description: >
+        Free-text justification for overall_score. Must satisfy
+        justification_requirements below.
+    criterion_scores:
+      type: object
+      description: Per-criterion integer scores, one per entry in `criteria`.
+      properties:
+        decomposition:
+          type: integer
+          range: [1, 5]
+        root_cause:
+          type: integer
+          range: [1, 5]
+        tradeoff_awareness:
+          type: integer
+          range: [1, 5]
+
+justification_requirements:
+  - id: names_driving_criteria
+    description: >
+      The justification must explicitly name which criterion or criteria
+      (by name and/or key, e.g. "Root-Cause ID vs. Symptom-Patching" /
+      `root_cause`) drove the overall_score, rather than giving a generic
+      summary that could apply to any response.
+  - id: direct_quotes
+    description: >
+      The justification must include 2-3 direct quotes excerpted verbatim
+      from the `response` field as evidence supporting the score. Quotes
+      should be short (phrase- or sentence-length) and clearly attributed
+      to the criterion they support.
+    quote_count_min: 2
+    quote_count_max: 3
+  - id: length
+    description: >
+      The justification must be between 150 and 300 words, inclusive.
+    word_count_min: 150
+    word_count_max: 300
+
+criteria:
+  - name: "Problem Decomposition & Diagnostic Depth"
+    key: decomposition
+    description: >
+      Does the response break OPEX down into its distinct cost drivers
+      (storage & handling, selling & marketing, logistics) and pose causal
+      sub-questions about each, or does it treat OPEX as a single
+      undifferentiated number and stay generic?
+    levels:
+      1: >
+        No decomposition; treats OPEX as a single undifferentiated number
+        (e.g. "cut costs 10% across the board"). No individual cost center
+        is named.
+      2: >
+        Names at most 1 of the 3 cost centers (storage & handling, S&M,
+        logistics) without distinguishing it analytically from the others;
+        no causal "why" sub-questions are posed for any cost center.
+      3: >
+        Meets standard: identifies at least 2 of the 3 distinct cost
+        drivers (storage & handling, S&M, logistics) by name, AND poses at
+        least one causal "why" sub-question for at least one of them (e.g.
+        "why is storage spend above budget?").
+      4: >
+        Identifies all 3 cost drivers (storage & handling, S&M, logistics)
+        by name, AND poses at least one causal "why" sub-question for at
+        least 2 of the 3.
+      5: >
+        Identifies all 3 cost drivers by name, poses at least one causal
+        "why" sub-question for each of the 3, AND explicitly ties the
+        decomposition back to budget variance per center (e.g. states how
+        much each center is over its individual budget, not just OPEX in
+        aggregate).
+
+  - name: "Root-Cause ID vs. Symptom-Patching"
+    key: root_cause
+    description: >
+      Does the response identify *why* each over-budget cost center is over
+      budget (a root cause distinct from the symptom, e.g. "storage is
+      over-provisioned due to poor demand forecasting"), or does it merely
+      prescribe a fix without any diagnosis of cause (symptom-patching)?
+    levels:
+      1: >
+        No root cause is named for any cost center; response only restates
+        the symptom and/or jumps straight to a generic fix (e.g. "reduce
+        storage costs", "negotiate better logistics rates") with no
+        explanation of why the cost is high.
+      2: >
+        Names a cause for at most 1 cost center, but the "cause" given is
+        actually a restatement of the symptom rather than a distinct
+        underlying driver (e.g. "storage costs are high because the
+        storage budget was exceeded").
+      3: >
+        Meets standard: for at least one over-budget cost center, names a
+        root cause that is mechanistically distinct from the symptom (e.g.
+        "storage costs are high due to poor demand forecasting leading to
+        over-provisioning" rather than just "storage costs are high").
+      4: >
+        Names a root cause distinct from the symptom (per the level-3
+        definition) for at least 2 of the 3 cost centers.
+      5: >
+        Names a root cause distinct from the symptom for all 3 cost
+        centers, AND for at least one of them traces the cause back one
+        additional causal step (a root cause of the root cause, e.g.
+        "over-provisioning is driven by demand forecasting that doesn't
+        account for seasonal SKU-level variance").
+
+  - name: "Tradeoff / Second-Order Effect Awareness"
+    key: tradeoff_awareness
+    description: >
+      Does the response name knock-on consequences or tradeoffs created by
+      its own proposed interventions (e.g. "cheaper logistics may raise
+      inventory carrying cost"), or does it propose fixes in isolation with
+      no awareness of second-order effects?
+    levels:
+      1: >
+        No tradeoffs or second-order effects are mentioned anywhere in the
+        response; every proposed intervention is presented as a free
+        improvement with no downside or interaction with other cost
+        centers.
+      2: >
+        Gestures at risk in vague terms (e.g. "this could have some
+        downsides") without naming a specific, mechanistic tradeoff tied to
+        a specific proposed intervention.
+      3: >
+        Meets standard: names at least one specific tradeoff or
+        second-order effect tied to a specific proposed intervention (e.g.
+        "moving to a cheaper logistics provider may raise inventory
+        carrying cost" or "cutting S&M spend may reduce near-term demand,
+        worsening storage over-provisioning").
+      4: >
+        Names at least 2 distinct tradeoffs/second-order effects, each tied
+        to a specific proposed intervention, AND at least one of these
+        tradeoffs crosses between two different cost centers (e.g. a
+        logistics change affecting storage, or an S&M change affecting
+        logistics volume).
+      5: >
+        Names at least 2 distinct cross-cost-center tradeoffs (per level 4)
+        AND explicitly recommends how to monitor, mitigate, or sequence the
+        interventions to manage the named tradeoffs (e.g. phased rollout,
+        a metric to watch, a guardrail).

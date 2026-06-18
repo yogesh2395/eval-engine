@@ -1,0 +1,8 @@
+.claude/worktrees/
+.env
+.env.local
+secrets.*
+__pycache__/
+*.pyc
+.venv/
+.DS_Store

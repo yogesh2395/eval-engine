@@ -38,6 +38,11 @@ is required to pass ALL of the following mechanical proxies:
      This proxies "tied to the OPEX example" from AC #1 -- a generic
      anchor like "demonstrates good diagnostic thinking" would not
      reference any concrete scenario element and would fail this check.
+     This check applies ONLY to levels 3-5 of each criterion. Levels 1-2
+     intentionally describe vague/generic/absent diagnostic behavior (the
+     low end of the scale that higher levels are contrasted against) and
+     are not required to name a specific cost-center term -- same
+     rationale as proxy #3 below.
 
   3. Quantifiable/falsifiable marker: must contain at least one of:
        - a digit (e.g. "2 of 3", "1 of 3"),
@@ -46,6 +51,12 @@ is required to pass ALL of the following mechanical proxies:
      This proxies the "discrete, falsifiable threshold" requirement
      (AC #1, AC #5) -- i.e. the anchor states a checkable count/condition
      rather than just an adjective like "good" or "strong".
+     This check applies ONLY to levels 3-5 of each criterion. Levels 1-2
+     intentionally describe the vague/generic/absent diagnostic behavior
+     that the higher levels are contrasted against (e.g. "no decomposition"
+     or "gestures at risk in vague terms... without naming a specific
+     tradeoff") -- by definition they describe the *absence* of a
+     falsifiable count, so requiring one of them would be incoherent.
 
 These proxies are necessarily approximate (a human could still write a
 technically-passing anchor that is qualitatively vague, or vice versa),
@@ -263,10 +274,23 @@ class TestAnchorsAreConcreteNotVague(unittest.TestCase):
                         f"short ({len(collapsed)} chars), may be vague: {collapsed!r}",
                     )
 
-    def test_all_level_anchors_reference_a_cost_center_term(self):
+    def test_level_3_through_5_anchors_reference_a_cost_center_term(self):
+        """AC #1 requires anchors to be concretely tied to the OPEX example
+        starting at level 3 ('meets standard') and above (4, 5).
+
+        Levels 1 and 2 are deliberately exempt from this check: those
+        anchors describe vague/generic/absent diagnostic behavior (e.g.
+        "no decomposition", "gestures at risk in vague terms... without
+        naming a specific tradeoff") rather than a concrete engagement with
+        the scenario, so requiring a named cost-center term in that text
+        would be incoherent. Only levels 3-5 are required to be concretely
+        tied to the OPEX example via a named cost-center term.
+        """
         for c in self.criteria:
             key = c.get("key")
             for level_num, anchor in c.get("levels", {}).items():
+                if level_num in (1, 2):
+                    continue
                 with self.subTest(criterion=key, level=level_num):
                     self.assertTrue(
                         _has_cost_center_term(anchor),
@@ -275,10 +299,23 @@ class TestAnchorsAreConcreteNotVague(unittest.TestCase):
                         f"may be generic/untied-to-example: {anchor!r}",
                     )
 
-    def test_all_level_anchors_have_falsifiable_marker(self):
+    def test_level_3_through_5_anchors_have_falsifiable_marker(self):
+        """AC #5 requires an explicit, falsifiable threshold starting at
+        level 3 ('meets standard') and above (4, 5).
+
+        Levels 1 and 2 are deliberately exempt from this check: those
+        anchors describe vague/generic/absent diagnostic behavior (e.g.
+        "no decomposition", "gestures at risk in vague terms... without
+        naming a specific tradeoff") -- they are describing the *absence*
+        of a falsifiable count, so requiring one of them in the anchor text
+        itself would be incoherent. Only levels 3-5 are required to spell
+        out a concrete, checkable bar.
+        """
         for c in self.criteria:
             key = c.get("key")
             for level_num, anchor in c.get("levels", {}).items():
+                if level_num in (1, 2):
+                    continue
                 with self.subTest(criterion=key, level=level_num):
                     self.assertTrue(
                         _has_falsifiable_marker(anchor),

@@ -18,6 +18,13 @@ or simply:
     python3 tests/test_rubric_spec.py
 
 --------------------------------------------------------------------------
+The rubric is now a domain-independent constitution. Level anchors are
+abstract and structural -- no OPEX/cost-center/logistics/S&M/storage
+language appears in the anchor text. Concrete domain instantiations are
+produced by a separate generator layer. OPEX references are confined to
+the top-level `example_scenario:` field (labeled as a placeholder) and
+per-criterion `opex_example:` documentation fields.
+
 Mechanical "no vague language" proxy (documented per instructions, used
 for AC #1 and AC #5):
 
@@ -26,27 +33,19 @@ is required to pass ALL of the following mechanical proxies:
 
   1. Minimum length: at least 40 characters (after whitespace collapse).
      Anchors like "good diagnosis" or "shows some awareness" are short;
-     genuine concrete anchors describing named cost centers + thresholds
-     run much longer in this spec (observed: shortest anchor is ~120
-     chars). 40 chars is a deliberately generous floor that would still
-     reject one-line vague filler, while not being so tight it could
-     reject a legitimately terse but concrete anchor.
+     genuine concrete anchors with structural thresholds run much longer
+     in this spec (observed: shortest anchor is ~120 chars). 40 chars is
+     a deliberately generous floor that would still reject one-line vague
+     filler, while not being so tight it could reject a legitimately terse
+     but concrete anchor.
 
-  2. Domain-term anchoring: must mention at least one of the named OPEX
-     cost-center terms relevant to this scenario: "storage", "S&M",
-     "selling & marketing", "selling and marketing", or "logistics".
-     This proxies "tied to the OPEX example" from AC #1 -- a generic
-     anchor like "demonstrates good diagnostic thinking" would not
-     reference any concrete scenario element and would fail this check.
-     This check applies ONLY to levels 3-5 of each criterion. Levels 1-2
-     intentionally describe vague/generic/absent diagnostic behavior (the
-     low end of the scale that higher levels are contrasted against) and
-     are not required to name a specific cost-center term -- same
-     rationale as proxy #3 below.
-
-  3. Quantifiable/falsifiable marker: must contain at least one of:
+  2. Quantifiable/falsifiable marker: must contain at least one of:
        - a digit (e.g. "2 of 3", "1 of 3"),
-       - or one of the words: "at least", "all 3", "each", "every",
+       - or "≥" (the ≥ symbol, used as a count marker in abstract anchors
+         such as "≥1", "≥2", "≥3" throughout the constitution),
+       - or one of the phrases: "at least", "all " (lowercase with trailing
+         space -- matches "all identified", "all proposed", etc. while
+         avoiding false matches on "overall"), "all 3", "each", "every",
          "no individual", "no root cause", "no tradeoffs".
      This proxies the "discrete, falsifiable threshold" requirement
      (AC #1, AC #5) -- i.e. the anchor states a checkable count/condition
@@ -58,11 +57,18 @@ is required to pass ALL of the following mechanical proxies:
      tradeoff") -- by definition they describe the *absence* of a
      falsifiable count, so requiring one of them would be incoherent.
 
+     CONDITIONAL-CRITERIA EXEMPTION: Criteria whose YAML entry has a
+     `conditional` field present (currently: journey_coherence, calibration)
+     are exempt from proxy #2. Their anchors describe arc coherence and
+     confidence calibration posture, not falsifiable count thresholds.
+     Requiring a digit or count marker in those anchors would be incoherent
+     -- the same rationale as the level 1-2 exemption above.
+
 These proxies are necessarily approximate (a human could still write a
 technically-passing anchor that is qualitatively vague, or vice versa),
 but they directly operationalize the criteria's own stated examples
-(e.g. ">=2 of 3 named cost drivers + >=1 causal why question") and should
-let a validator quickly judge if the proxy is reasonable.
+(e.g. ">=2 of 3 named sub-components + >=1 causal why question") and
+should let a validator quickly judge if the proxy is reasonable.
 --------------------------------------------------------------------------
 """
 
@@ -78,27 +84,28 @@ RUBRIC_PATH = os.path.join(
     "rubric_spec.yaml",
 )
 
-EXPECTED_CRITERION_KEYS = ["decomposition", "root_cause", "tradeoff_awareness"]
-EXPECTED_LEVELS = [1, 2, 3, 4, 5]
-
-COST_CENTER_TERMS = [
-    "storage",
-    "s&m",
-    "selling & marketing",
-    "selling and marketing",
-    "logistics",
-    "cost center",
-    "cost driver",
+EXPECTED_CRITERION_KEYS = [
+    "decomposition",
+    "root_cause",
+    "tradeoff_awareness",
+    "materiality",
+    "evidentiary_grounding",
+    "feasibility",
+    "journey_coherence",
+    "calibration",
 ]
+EXPECTED_LEVELS = [1, 2, 3, 4, 5]
 
 FALSIFIABLE_MARKERS = [
     "at least",
+    "all ",
     "all 3",
     "each",
     "every",
     "no individual",
     "no root cause",
     "no tradeoffs",
+    "≥",
 ]
 
 MIN_ANCHOR_LENGTH = 40
@@ -121,13 +128,6 @@ def _has_falsifiable_marker(text):
     lowered = text.lower()
     return _has_digit(text) or any(marker in lowered for marker in FALSIFIABLE_MARKERS)
 
-
-def _has_cost_center_term(text):
-    # Normalize hyphens to spaces so compound forms like "cross-cost-center"
-    # still match the "cost center" term (a hyphenated variant of the same
-    # phrase, not a different/more-generic phrase).
-    lowered = text.lower().replace("-", " ")
-    return any(term in lowered for term in COST_CENTER_TERMS)
 
 
 class TestRubricSpecIsParseable(unittest.TestCase):
@@ -164,11 +164,11 @@ class TestCriteriaCountAndKeys(unittest.TestCase):
         self.assertIsNotNone(self.criteria, "Top-level `criteria` key is missing")
         self.assertIsInstance(self.criteria, list, "`criteria` must be a list")
 
-    def test_exactly_three_criteria(self):
+    def test_criterion_count(self):
         self.assertEqual(
             len(self.criteria),
-            3,
-            f"Expected exactly 3 criteria, found {len(self.criteria)}",
+            8,
+            f"Expected exactly 8 criteria, found {len(self.criteria)}",
         )
 
     def test_criterion_keys_are_exact_expected_set(self):
@@ -274,31 +274,6 @@ class TestAnchorsAreConcreteNotVague(unittest.TestCase):
                         f"short ({len(collapsed)} chars), may be vague: {collapsed!r}",
                     )
 
-    def test_level_3_through_5_anchors_reference_a_cost_center_term(self):
-        """AC #1 requires anchors to be concretely tied to the OPEX example
-        starting at level 3 ('meets standard') and above (4, 5).
-
-        Levels 1 and 2 are deliberately exempt from this check: those
-        anchors describe vague/generic/absent diagnostic behavior (e.g.
-        "no decomposition", "gestures at risk in vague terms... without
-        naming a specific tradeoff") rather than a concrete engagement with
-        the scenario, so requiring a named cost-center term in that text
-        would be incoherent. Only levels 3-5 are required to be concretely
-        tied to the OPEX example via a named cost-center term.
-        """
-        for c in self.criteria:
-            key = c.get("key")
-            for level_num, anchor in c.get("levels", {}).items():
-                if level_num in (1, 2):
-                    continue
-                with self.subTest(criterion=key, level=level_num):
-                    self.assertTrue(
-                        _has_cost_center_term(anchor),
-                        f"Criterion {key} level {level_num} anchor does not mention "
-                        f"any OPEX cost-center term (storage/S&M/logistics), "
-                        f"may be generic/untied-to-example: {anchor!r}",
-                    )
-
     def test_level_3_through_5_anchors_have_falsifiable_marker(self):
         """AC #5 requires an explicit, falsifiable threshold starting at
         level 3 ('meets standard') and above (4, 5).
@@ -310,8 +285,19 @@ class TestAnchorsAreConcreteNotVague(unittest.TestCase):
         of a falsifiable count, so requiring one of them in the anchor text
         itself would be incoherent. Only levels 3-5 are required to spell
         out a concrete, checkable bar.
+
+        CONDITIONAL-CRITERIA EXEMPTION: Criteria with a `conditional` field
+        in their YAML entry (currently: journey_coherence, calibration) are
+        also exempt. Their anchors describe diagnostic arc coherence and
+        confidence calibration posture, not OPEX-specific falsifiable count
+        thresholds -- requiring a digit or count marker in those anchors
+        would be incoherent (same rationale as the levels 1-2 exemption).
         """
         for c in self.criteria:
+            # Conditional criteria anchors describe arc coherence and confidence
+            # calibration posture, not OPEX count thresholds -- exempted.
+            if c.get("conditional") is not None:
+                continue
             key = c.get("key")
             for level_num, anchor in c.get("levels", {}).items():
                 if level_num in (1, 2):
@@ -334,10 +320,19 @@ class TestAnchorsAreConcreteNotVague(unittest.TestCase):
         ('at least one', 'all 3', etc., via _has_falsifiable_marker) --
         establishing a concrete, checkable bar, not just prose like 'shows
         reasonable diagnostic ability'.
+
+        CONDITIONAL-CRITERIA EXEMPTION: Criteria with a `conditional` field
+        in their YAML entry (currently: journey_coherence, calibration) are
+        exempt from the falsifiable-marker requirement (b). Their level-3
+        anchors describe a confidence posture ('meets standard' for
+        calibration) or arc coherence (journey_coherence), not a countable
+        OPEX threshold. Requiring a digit or count marker would be
+        incoherent. The 'Meets standard' label requirement (a) still applies.
         """
         for c in self.criteria:
             key = c.get("key")
             level_3_anchor = c.get("levels", {}).get(3, "")
+            is_conditional = c.get("conditional") is not None
             with self.subTest(criterion=key):
                 self.assertIn(
                     "Meets standard",
@@ -345,11 +340,14 @@ class TestAnchorsAreConcreteNotVague(unittest.TestCase):
                     f"Criterion {key} level 3 anchor does not explicitly flag "
                     f"itself as the 'meets standard' threshold: {level_3_anchor!r}",
                 )
-                self.assertTrue(
-                    _has_falsifiable_marker(level_3_anchor),
-                    f"Criterion {key} level 3 anchor lacks a numeric/countable "
-                    f"threshold (e.g. '2 of 3', 'at least one'): {level_3_anchor!r}",
-                )
+                if not is_conditional:
+                    # Conditional criteria anchors describe confidence posture or
+                    # arc coherence, not countable OPEX thresholds -- exempted.
+                    self.assertTrue(
+                        _has_falsifiable_marker(level_3_anchor),
+                        f"Criterion {key} level 3 anchor lacks a numeric/countable "
+                        f"threshold (e.g. '2 of 3', 'at least one'): {level_3_anchor!r}",
+                    )
 
 
 class TestJustificationRequirements(unittest.TestCase):
@@ -435,7 +433,9 @@ class TestJustificationRequirements(unittest.TestCase):
 class TestIOShape(unittest.TestCase):
     """AC #4: input {prompt: string, response: string} -> output
     {overall_score: integer 1-5, justification: string,
-     criterion_scores: {decomposition, root_cause, tradeoff_awareness}}."""
+     criterion_scores: {decomposition, root_cause, tradeoff_awareness,
+     materiality, evidentiary_grounding, feasibility,
+     journey_coherence, calibration}}."""
 
     @classmethod
     def setUpClass(cls):
@@ -499,7 +499,7 @@ class TestIOShape(unittest.TestCase):
             "io_shape.output.justification.type must be 'string'",
         )
 
-    def test_output_has_criterion_scores_object_with_exact_three_properties(self):
+    def test_output_has_criterion_scores_with_exact_eight_properties(self):
         output_shape = self.io_shape.get("output")
         criterion_scores = output_shape.get("criterion_scores")
         self.assertIsNotNone(
@@ -541,6 +541,88 @@ class TestIOShape(unittest.TestCase):
             sorted(["overall_score", "justification", "criterion_scores"]),
             f"io_shape.output should have exactly overall_score+justification+"
             f"criterion_scores, got {list(output_shape.keys())}",
+        )
+
+
+class TestDomainIndependence(unittest.TestCase):
+    """
+    Enforces the constitution/generator split.
+
+    Rubric anchors must be domain-independent: abstract, structural language
+    only.  OPEX instantiations belong in `opex_example:` fields and generator
+    output, never in the constitution's level anchors.
+
+    This test scans ALL 8 criteria — including the conditional criteria
+    journey_coherence and calibration — across ALL 5 levels, asserting that no
+    level anchor contains any OPEX-specific forbidden term.  It also asserts
+    that the top-level `example_scenario:` field is present and explicitly
+    labeled as a placeholder, confirming it is not silently treated as
+    canonical domain specification for the constitution's anchors.
+    """
+
+    FORBIDDEN_TERMS = [
+        "storage",
+        "logistics",
+        "s&m",
+        "selling & marketing",
+        "selling and marketing",
+        "cost center",
+        "cost driver",
+        "budget",
+        "opex",
+        "freight",
+        "procurement",
+        "inventory",
+        "q3",
+        "q4",
+    ]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data = _load_rubric()
+        cls.criteria = cls.data.get("criteria", [])
+
+    def test_no_opex_terms_in_any_level_anchor(self):
+        """All 8 criteria x 5 levels: level anchor text must contain no
+        OPEX-specific domain term.  A hit means a domain instantiation has
+        leaked from the generator layer into the constitution layer.
+
+        Additionally asserts that the top-level example_scenario: field is
+        present AND contains the literal text '[Placeholder', confirming it is
+        explicitly labeled as a generator test fixture and not silently treated
+        as canonical domain specification.
+        """
+        # --- Part 1: no forbidden OPEX term in any level anchor ---
+        for c in self.criteria:
+            key = c.get("key")
+            levels = c.get("levels", {})
+            for level_num in EXPECTED_LEVELS:
+                anchor = levels.get(level_num, "")
+                if not isinstance(anchor, str):
+                    continue
+                anchor_lower = anchor.lower()
+                for term in self.FORBIDDEN_TERMS:
+                    with self.subTest(criterion=key, level=level_num, term=term):
+                        self.assertNotIn(
+                            term,
+                            anchor_lower,
+                            f"Criterion {key} level {level_num} anchor contains "
+                            f"OPEX-specific term '{term}': {anchor!r} — move "
+                            f"domain-specific language to the opex_example: field",
+                        )
+
+        # --- Part 2: example_scenario is present and labeled as a placeholder ---
+        scenario = self.data.get("example_scenario")
+        self.assertIsNotNone(
+            scenario,
+            "Top-level `example_scenario:` field is missing from rubric_spec.yaml",
+        )
+        self.assertIn(
+            "[Placeholder",
+            scenario,
+            "Top-level `example_scenario:` field does not contain the literal "
+            "text '[Placeholder' — it must be explicitly labeled as a generator "
+            "test fixture, not silently treated as canonical domain specification",
         )
 
 

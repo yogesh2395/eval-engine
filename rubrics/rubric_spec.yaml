@@ -3,12 +3,15 @@
 # Spec-only document. No scoring logic, no code, no parsers, no LLM prompt
 # templates live here. This file defines the contract and rubric that a
 # (separately implemented) scorer must satisfy when grading a consultant's
-# diagnostic response to the fixed OPEX scenario below.
+# diagnostic response to the example scenario below.
 
-scenario: >
-  A company is facing high OPEX costs, far exceeding budget, across distinct
-  cost centers: storage & handling, selling & marketing, and logistics.
-  A consultant is asked to diagnose and recommend solutions.
+example_scenario: >
+  [Placeholder — generator test fixture only. The rubric anchors are
+  domain-independent; this example shows how the generator would instantiate
+  them for an OPEX cost-overrun problem.] A company is facing high OPEX
+  costs, far exceeding budget, across distinct cost centers: storage &
+  handling, selling & marketing, and logistics. A consultant is asked to
+  diagnose and recommend solutions.
 
 io_shape:
   input:
@@ -29,7 +32,9 @@ io_shape:
         A single holistic score for the response, expected to be consistent
         with (e.g. a weighted or rounded function of) the three
         criterion_scores, though the exact aggregation method is left to the
-        scorer implementation, not this spec.
+        scorer implementation, not this spec. The rubric is domain-independent;
+        concrete anchors for a specific (industry, problem-type, approach) are
+        produced by the generator and stored in the repository.
     justification:
       type: string
       description: >
@@ -48,6 +53,23 @@ io_shape:
         tradeoff_awareness:
           type: integer
           range: [1, 5]
+        materiality:
+          type: integer
+          range: [1, 5]
+        evidentiary_grounding:
+          type: integer
+          range: [1, 5]
+        feasibility:
+          type: integer
+          range: [1, 5]
+        journey_coherence:
+          type: integer
+          range: [1, 5]
+          conditional: "N/A when pre-qualifier or trace artifact absent"
+        calibration:
+          type: integer
+          range: [1, 5]
+          conditional: "N/A when problem_type classification absent"
 
 justification_requirements:
   - id: names_driving_criteria
@@ -78,30 +100,28 @@ criteria:
       (storage & handling, selling & marketing, logistics) and pose causal
       sub-questions about each, or does it treat OPEX as a single
       undifferentiated number and stay generic?
+    opex_example: "For an OPEX cost-overrun problem: identifies storage & handling, selling & marketing, and logistics as distinct cost drivers and asks why each exceeds its budget."
     levels:
       1: >
-        No decomposition; treats OPEX as a single undifferentiated number
-        (e.g. "cut costs 10% across the board"). No individual cost center
-        is named.
+        No decomposition — the problem is treated as a single undifferentiated
+        entity with no distinct sub-components identified. All proposed actions
+        are generic and apply equally to the whole problem.
       2: >
-        Names at most 1 of the 3 cost centers (storage & handling, S&M,
-        logistics) without distinguishing it analytically from the others;
-        no causal "why" sub-questions are posed for any cost center.
+        Names at most 1 sub-component without distinguishing it analytically
+        from the problem as a whole; no causal sub-questions posed for any
+        sub-component.
       3: >
-        Meets standard: identifies at least 2 of the 3 distinct cost
-        drivers (storage & handling, S&M, logistics) by name, AND poses at
-        least one causal "why" sub-question for at least one of them (e.g.
-        "why is storage spend above budget?").
+        Meets standard: identifies ≥2 distinct, non-overlapping sub-components
+        of the problem by name AND poses ≥1 causal "why" sub-question for ≥1
+        of the named sub-components.
       4: >
-        Identifies all 3 cost drivers (storage & handling, S&M, logistics)
-        by name, AND poses at least one causal "why" sub-question for at
-        least 2 of the 3.
+        Identifies ≥3 distinct, non-overlapping sub-components and poses at
+        least one causal sub-question for ≥2 of them.
       5: >
-        Identifies all 3 cost drivers by name, poses at least one causal
-        "why" sub-question for each of the 3, AND explicitly ties the
-        decomposition back to budget variance per center (e.g. states how
-        much each center is over its individual budget, not just OPEX in
-        aggregate).
+        Identifies ≥3 distinct, collectively exhaustive sub-components, poses
+        at least one causal sub-question for each, AND explicitly ties the
+        decomposition to observed variance or differential contribution across
+        sub-components.
 
   - name: "Root-Cause ID vs. Symptom-Patching"
     key: root_cause
@@ -110,31 +130,29 @@ criteria:
       budget (a root cause distinct from the symptom, e.g. "storage is
       over-provisioned due to poor demand forecasting"), or does it merely
       prescribe a fix without any diagnosis of cause (symptom-patching)?
+    opex_example: "For an OPEX cost-overrun problem: identifies that storage costs are high due to poor demand forecasting leading to over-provisioning, rather than simply noting that storage costs exceed budget."
     levels:
       1: >
-        No root cause is named for any cost center; response only restates
-        the symptom and/or jumps straight to a generic fix (e.g. "reduce
-        storage costs", "negotiate better logistics rates") with no
-        explanation of why the cost is high.
+        No root cause identified; the response restates the symptom or jumps
+        immediately to a fix with no diagnostic causal chain (e.g., names the
+        problem as its own cause, or prescribes an action without stating what
+        underlying condition makes that action necessary).
       2: >
-        Names a cause for at most 1 cost center, but the "cause" given is
-        actually a restatement of the symptom rather than a distinct
-        underlying driver (e.g. "storage costs are high because the
-        storage budget was exceeded").
+        Names a "cause" that is actually a restatement or near-synonym of the
+        symptom — the proposed cause and the symptom could be swapped without
+        loss of meaning, meaning no real causal step has been taken.
       3: >
-        Meets standard: for at least one over-budget cost center, names a
-        root cause that is mechanistically distinct from the symptom (e.g.
-        "storage costs are high due to poor demand forecasting leading to
-        over-provisioning" rather than just "storage costs are high").
+        Meets standard: for ≥1 named sub-component, provides a candidate cause
+        that is mechanistically distinct from the symptom — removing the cause
+        would change the symptom — rather than restating it.
       4: >
-        Names a root cause distinct from the symptom (per the level-3
-        definition) for at least 2 of the 3 cost centers.
+        Names mechanistically distinct root causes for ≥2 identified
+        sub-components; each cause is distinguishable from its corresponding
+        symptom.
       5: >
-        Names a root cause distinct from the symptom for all 3 cost
-        centers, AND for at least one of them traces the cause back one
-        additional causal step (a root cause of the root cause, e.g.
-        "over-provisioning is driven by demand forecasting that doesn't
-        account for seasonal SKU-level variance").
+        Names mechanistically distinct root causes for ≥2 sub-components AND
+        traces at least 1 cause back one additional causal step — a root cause
+        of the root cause — with that deeper mechanism stated explicitly.
 
   - name: "Tradeoff / Second-Order Effect Awareness"
     key: tradeoff_awareness
@@ -143,30 +161,210 @@ criteria:
       its own proposed interventions (e.g. "cheaper logistics may raise
       inventory carrying cost"), or does it propose fixes in isolation with
       no awareness of second-order effects?
+    opex_example: "For an OPEX cost-overrun problem: names that switching to a cheaper logistics provider may raise inventory carrying cost, a tradeoff that crosses into the storage sub-component."
     levels:
       1: >
-        No tradeoffs or second-order effects are mentioned anywhere in the
-        response; every proposed intervention is presented as a free
-        improvement with no downside or interaction with other cost
-        centers.
+        No tradeoffs or second-order effects mentioned anywhere; every proposed
+        intervention is presented as a free improvement with no downside,
+        interaction effect, or knock-on consequence.
       2: >
-        Gestures at risk in vague terms (e.g. "this could have some
-        downsides") without naming a specific, mechanistic tradeoff tied to
-        a specific proposed intervention.
+        Gestures at risk in vague terms (e.g., "this may have some challenges")
+        without naming a specific, mechanistic tradeoff tied to a specific
+        proposed intervention.
       3: >
-        Meets standard: names at least one specific tradeoff or
-        second-order effect tied to a specific proposed intervention (e.g.
-        "moving to a cheaper logistics provider may raise inventory
-        carrying cost" or "cutting S&M spend may reduce near-term demand,
-        worsening storage over-provisioning").
+        Meets standard: names ≥1 specific second-order effect or tradeoff tied
+        to ≥1 specific proposed intervention — the named effect is
+        mechanistically linked to the intervention, not a generic caveat.
       4: >
-        Names at least 2 distinct tradeoffs/second-order effects, each tied
-        to a specific proposed intervention, AND at least one of these
-        tradeoffs crosses between two different cost centers (e.g. a
-        logistics change affecting storage, or an S&M change affecting
-        logistics volume).
+        Names ≥2 distinct second-order effects or tradeoffs, each tied to a
+        specific intervention, AND at least 1 of them crosses between 2
+        different identified sub-components of the problem.
       5: >
-        Names at least 2 distinct cross-cost-center tradeoffs (per level 4)
-        AND explicitly recommends how to monitor, mitigate, or sequence the
-        interventions to manage the named tradeoffs (e.g. phased rollout,
-        a metric to watch, a guardrail).
+        Names ≥2 cross-component tradeoffs AND explicitly recommends how to
+        monitor, mitigate, or sequence the interventions in order to manage the
+        named tradeoffs (e.g., phased rollout, a guardrail metric, a trigger
+        condition).
+
+  - name: "Materiality / Prioritization"
+    key: materiality
+    description: >
+      Does the response allocate analytical depth and recommendations
+      proportionally to the impact/leverage of each identified driver —
+      explicitly ranking or designating what matters most and stating the
+      basis for that priority — rather than enumerating all items at equal
+      weight?
+    opex_example: "For an OPEX cost-overrun problem: explicitly designates logistics as the highest-priority driver because it accounts for 60% of the total cost variance and addresses it with proportionally greater depth."
+    levels:
+      1: >
+        All identified sub-components or interventions are treated as equally
+        weighted; the response is a flat enumeration with no stated basis for
+        relative importance. All items receive the same analytical depth
+        regardless of their contribution to the problem.
+      2: >
+        Implicitly gives more attention to 1 sub-component than others (e.g.,
+        longer treatment) but never explicitly states a priority ranking or the
+        basis for the imbalance.
+      3: >
+        Meets standard: explicitly designates ≥1 sub-component or intervention
+        as higher priority than the others AND states the basis for that ranking
+        (magnitude, impact, leverage, or urgency — not just assertion).
+      4: >
+        Explicitly ranks ≥2 sub-components or interventions by a stated basis,
+        with analytical depth proportional to the stated priority of each.
+      5: >
+        All identified sub-components are explicitly ranked by a stated basis
+        with proportional analytical depth, AND lower-priority items are
+        explicitly acknowledged and scoped out with justification rather than
+        simply omitted.
+
+  - name: "Evidentiary Grounding & Falsifiability"
+    key: evidentiary_grounding
+    description: >
+      Are substantive diagnostic claims accompanied by a stated basis — a
+      figure, named data source, or explicit causal mechanism — and/or
+      stated in falsifiable form (what evidence would confirm or refute the
+      claim)? Note: this dimension scores epistemic grounding and
+      testability, not whether the claim is factually correct.
+    opex_example: "For an OPEX cost-overrun problem: attaches a specific figure or named data source to a claim about logistics spend, or states what data pattern would confirm that expedited freight is the primary cost driver."
+    levels:
+      1: >
+        All substantive claims are bare assertions with no stated basis and no
+        falsifiable form — no figures, no named sources, no mechanisms, and no
+        stated prediction that could be tested.
+      2: >
+        Gestures at a basis (e.g., "based on typical patterns" or "generally
+        speaking") without naming a specific figure, source, or causal
+        mechanism; claims are stated as conclusions with no testable implication.
+      3: >
+        Meets standard: for ≥1 substantive claim, attaches a stated basis (a
+        specific figure, a named data source, or an explicit causal mechanism)
+        OR states what evidence would confirm or refute the claim (i.e., at
+        least 1 claim is in falsifiable form).
+      4: >
+        ≥2 distinct substantive claims carry a stated basis or falsifiable test;
+        at least 1 claim is in explicitly conditional or hypothesis form ("if X,
+        then Y should be observable").
+      5: >
+        All substantive claims carry a stated basis AND at least 1 claim per
+        identified sub-component is in explicitly falsifiable form with a named
+        confirmation test; assumptions are explicitly distinguished from evidence
+        throughout.
+
+  - name: "Feasibility / Implementation Realism"
+    key: feasibility
+    description: >
+      Does the response acknowledge the preconditions and constraints —
+      resources, time, capability, dependencies, authority — bearing on
+      whether its recommendations can actually be executed, rather than
+      presenting interventions as costlessly or immediately actionable?
+    opex_example: "For an OPEX cost-overrun problem: names that logistics contract renegotiation requires waiting out a 12-month lock-in period before any cost savings can be realized."
+    levels:
+      1: >
+        All proposed interventions are presented as immediately executable with
+        no preconditions or constraints acknowledged; every recommendation is
+        implicitly treated as costlessly actionable.
+      2: >
+        Mentions implementation difficulty in general terms (e.g., "this will
+        require change management") without naming any specific precondition
+        tied to a specific intervention.
+      3: >
+        Meets standard: for ≥1 proposed intervention, names ≥1 concrete
+        precondition or constraint affecting executability — specifically a
+        resource requirement, time horizon, capability gap, dependency, or
+        authority requirement.
+      4: >
+        Names concrete preconditions for ≥2 distinct proposed interventions;
+        at least 1 precondition is specific enough to gate the intervention
+        (i.e., names a requirement that does not currently exist and must be
+        acquired or resolved first).
+      5: >
+        All proposed interventions carry named preconditions or constraints, AND
+        the response sequences or phases its recommendations based on those
+        constraints — the ordering of interventions reflects their preconditions.
+
+  - name: "Journey Coherence"
+    key: journey_coherence
+    description: >
+      Is the final recommendation internally consistent with the initial
+      problem framing, and does it address — or explicitly scope out —
+      discoveries made during the diagnostic work? Scores the coherence of
+      the full arc: framing → diagnostic work → recommendation.
+    opex_example: "For an OPEX cost-overrun problem: final recommendation addresses the originally framed cost-overrun question and references which diagnostic hypotheses (e.g., logistics procurement) were confirmed or ruled out during the analysis."
+    conditional: >
+      Score N/A (not 0) when either the initial framing artifact
+      (pre-qualifier output) or the reasoning trace artifact
+      (process-monitor input) is absent. N/A means the dimension cannot be
+      assessed, not that the response failed.
+    levels:
+      1: >
+        The final recommendation answers a materially different question than
+        the one originally framed, or contradicts a conclusion drawn during
+        diagnostic work without acknowledging the contradiction
+        (e.g., the initial framing named a specific root cause, but the final
+        recommendation addresses a different sub-component entirely, with no
+        explanation of the pivot).
+      2: >
+        The recommendation is nominally responsive to the framing but ignores
+        ≥1 significant discovery made during diagnostic work without
+        acknowledging its omission.
+      3: >
+        Meets standard: the final recommendation addresses the originally
+        framed diagnostic question AND references or incorporates ≥1 finding
+        from the diagnostic work — either by acting on it or explicitly
+        scoping it out (e.g., 'the working hypothesis from step 2 was ruled
+        out — this recommendation reflects the revised framing from step 4').
+      4: >
+        The recommendation is fully responsive to the framing, addresses all
+        significant mid-work discoveries, and explicitly states which
+        hypotheses were confirmed, which were ruled out, and why.
+      5: >
+        As level 4, plus: the recommendation explicitly reconciles any
+        tension between the initial framing assumptions and what the
+        diagnostic work revealed — naming where assumptions held and where
+        they were overturned.
+
+  - name: "Calibration"
+    key: calibration
+    description: >
+      Is the confidence level expressed in claims and recommendations
+      commensurate with the strength of the underlying evidence? Distinct
+      from evidentiary_grounding (which asks whether a basis was stated) —
+      this dimension asks whether the stated confidence matches that basis.
+      Conditioned by problem_type: stochastic/distributional problems require
+      hedged confidence; deterministic/unique-solution problems with direct
+      feedback permit firm claims.
+    opex_example: "For an OPEX cost-overrun problem: uses hedged language ('data suggests logistics may be the primary driver, pending validation') for preliminary cost-driver findings and reserves firm language for claims backed by direct data."
+    conditional: >
+      Score N/A when no problem_type classification is available from the
+      pre-qualifier. When problem_type = {unique, direct}: calibration also
+      checks whether the proposed solution demonstrably satisfies the stated
+      constraints — this verification step is currently a stub (tool slot
+      reserved for future MCP/proof-runner integration); score on
+      confidence-evidence alignment only in v1.
+    levels:
+      1: >
+        Systematic confidence mismatch throughout: presents unsupported or
+        weakly-supported claims with high certainty (e.g., 'implementing this
+        will resolve the issue' stated without supporting evidence), or presents
+        well-evidenced claims with excessive hedging that undermines the
+        diagnostic value.
+      2: >
+        Occasional confidence mismatch: most claims appropriately calibrated,
+        but ≥1 substantive claim about a named sub-component carries significantly
+        higher or lower confidence than its evidential basis warrants.
+      3: >
+        Meets standard: confidence language across the response is broadly
+        commensurate with evidential strength — hedged where evidence is
+        indirect or partial (e.g., 'current evidence suggests X is the primary
+        driver, pending confirmation'), firm where evidence is strong and
+        direct; no systematic over- or under-claiming.
+      4: >
+        Confidence is explicitly and consistently matched to evidence
+        strength; the response distinguishes between confirmed findings,
+        working hypotheses, and speculative possibilities across all identified
+        sub-components, and uses appropriate language for each tier.
+      5: >
+        As level 4, plus: the response explicitly states what would move each
+        working hypothesis to a confirmed finding (what additional evidence
+        would shift confidence upward) — providing a calibration roadmap, not
+        just a calibrated snapshot.

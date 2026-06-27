@@ -1,0 +1,283 @@
+# decisions_tracker.md
+
+> Update this file before each `/committer` push. Add new entries for decisions made
+> in the session. Mark superseded entries with Status: Superseded by [D-NNN].
+> Entries are numbered chronologically. Inference from code is marked [inferred].
+
+---
+
+## Product Decisions
+
+### [D-001] Build scorer before routing logic
+- **Category:** Product
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md ("Keystone principle: build the scorer before any routing logic.")
+- **Decision:** The evaluation/scorer engine must be fully built and validated before any routing or orchestration logic is considered.
+- **Rationale:** Routing logic without a calibrated scorer produces noise. The scorer is the only ground-truth asset; routing is downstream of it.
+- **Implications:** Any PR touching orchestration or model-router is out of scope until the scorer ships. Validator must FAIL any work that conflates scorer with router.
+
+---
+
+### [D-002] v1 scope: pre + post eval phases only; during-phase is v2
+- **Category:** Product
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md (implied by phase structure), prequal_spec.yaml, rubric_spec.yaml
+- **Decision:** Version 1 includes only the pre-qualifier gate and the post-scorer. The during-evaluation process-monitor is deferred to v2 for scoring purposes.
+- **Rationale:** Sequencing risk reduction — the pre/post pipeline can be validated end-to-end without the complexity of real-time trace capture. Adding during-phase scoring in v1 would block delivery on a dependency that requires external trace artifacts.
+- **Implications:** process-monitor agent exists as a diagnostic tool in v1 but its output does not feed into the headline score. Post-scorer must degrade gracefully when trace artifacts are absent (journey_coherence → N/A).
+
+---
+
+### [D-003] Process-monitor is OPEN loop in v1 — output goes to orchestrator only
+- **Category:** Product
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md (Architecture principles); process-monitor agent definition
+- **Decision:** In v1, the process-monitor's output is diagnostic-only. It flows to the orchestrator and post-scorer; it never surfaces to the consultant.
+- **Rationale:** Surfacing real-time diagnostic signals to the consultant mid-session creates a feedback loop that could alter the very behavior being evaluated (reflexive contamination). Closed loop is a v2+ decision requiring explicit neutrality controls.
+- **Implications:** process-monitor output schema must include a `loop_mode: open` field. Any agent that routes monitor output to the consultant is a bug.
+
+---
+
+### [D-004] Target use case: neutral third-party evaluation authority
+- **Category:** Product
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md ("What this is: The evaluation/scorer engine for a neutral third-party evaluation authority.")
+- **Decision:** This system is built as a neutral third-party evaluator, not an operator-specific or self-assessment tool.
+- **Rationale:** Operator-embedded tools absorb the operator's worldview as calibration data, undermining comparability. A neutral authority's credibility requires independence from any single operator's cases, language, or preferences.
+- **Implications:** All rubric anchors must be domain-independent. Calibration data must be sourced independently. Operator-specific examples are fixtures only. Neutrality discipline (D-023) is a direct corollary.
+
+---
+
+## Architecture Decisions
+
+### [D-005] Constitution/generator/repository architecture
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md ("Rubric architecture: constitution → generator → repository"); rubric_spec.yaml (the constitution itself)
+- **Decision:** The rubric system has three layers: (1) rubric_spec.yaml is the invariant constitution with domain-independent anchors, (2) a generator instantiates concrete anchors for a given (industry, problem-type, approach), (3) a repository accumulates every instantiated rubric produced.
+- **Rationale:** Separating invariants from instantiations allows the same scoring engine to cover any domain without re-architecting. The repository creates a semantic flywheel — comparability and longitudinal lock-in accrete as a byproduct of normal usage with no cold-start effort.
+- **Implications:** The constitution file (rubric_spec.yaml) must be treated as append-only for dimensions and strictly abstracted for anchor text. The generator is the only place domain-specific language is permitted. The repository is the commercial moat.
+
+---
+
+### [D-006] Three evaluation phases: pre-qualifier / post-scorer / process-monitor
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** prequal_spec.yaml (pre-qualifier); rubric_spec.yaml (post-scorer); process-monitor agent definition
+- **Decision:** Evaluation is divided into three phases: (1) pre-qualifier gates and classifies before any scoring; (2) post-scorer scores quality across 8 dimensions; (3) process-monitor (during) is diagnostic-only in v1.
+- **Rationale:** Phase separation enforces a clean dependency chain. The pre-qualifier's gate output conditions how post-scorer anchors are applied — without the gate, the post-scorer cannot know which conditional dimensions are active.
+- **Implications:** Pre-qualifier must always run before post-scorer. If gate == BLOCK, post-scoring is short-circuited entirely. journey_coherence and calibration are conditional dimensions — N/A when their prerequisite artifacts are absent.
+
+---
+
+### [D-007] Flat tuples for knowledge graph output in v1
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md ("Knowledge graph structure uses flat tuples for classification output now; promote to property graph only when transitive structure emerges.")
+- **Decision:** Classification output in v1 uses flat tuples (cardinality, verifiability, flags as booleans). Promotion to a property graph with nodes, edges, and transitive inference is deferred until anchor-rules develop structure that a lookup table cannot express.
+- **Rationale:** Property graphs impose overhead (query language, traversal logic, schema versioning) that is not justified until the rules become transitive. Premature promotion adds complexity without diagnostic benefit.
+- **Implications:** conditioning_map in prequal_spec.yaml is a flat lookup over (cardinality × verifiability × flags). Any proposal to add edge types or graph traversal requires evidence of a transitive rule first.
+
+---
+
+### [D-008] Aggregation rule: gate → safety-critical cap → weighted average
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** rubric_spec.yaml (io_shape and criteria structure); implied by D-009
+- **Decision:** The overall_score aggregation applies three sequential rules: (1) if gate == BLOCK, no score is produced; (2) if any safety-critical dimension scores ≤2, the overall_score is capped at 3; (3) otherwise, a weighted average of criterion_scores is used.
+- **Rationale:** A weighted average alone can paper over a catastrophic failure on a single critical dimension (e.g., an analyst who guesses everything right but has zero evidentiary grounding). The cap makes safety-critical failures structurally visible in the headline score.
+- **Implications:** Scorers must apply the cap check before computing the weighted average. Any change to the safety-critical dimension list (D-009) automatically changes the cap's trigger condition.
+
+---
+
+### [D-009] Safety-critical cap: root_cause, evidentiary_grounding, calibration ≤2 → overall capped at 3
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** rubric_spec.yaml (scoring_rules or notes); CLAUDE.md (implied by architecture principles)
+- **Decision:** If any of {root_cause, evidentiary_grounding, calibration} scores ≤2, the overall_score is capped at 3 regardless of other dimension scores.
+- **Rationale:** These three dimensions represent the most diagnostically dangerous failure modes: misidentifying causes (root_cause), making claims without evidence (evidentiary_grounding), and being miscalibrated about uncertainty (calibration). A high overall score with any of these failing is misleading and dangerous.
+- **Implications:** These three dimensions cannot be absent or N/A when a score is produced. Post-scorer must flag any score where the cap fires. Changing this set requires an architecture-level decision, not a coder-level change.
+
+---
+
+### [D-010] Problem-type taxonomy: Axis A {contradictory/unique/multiple} + Axis B {direct/indirect/counterfactual}
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** prequal_spec.yaml (cardinality + verifiability enums)
+- **Decision:** The problem-type taxonomy uses two independent axes: Axis A (cardinality) = {contradictory, unique, multiple} and Axis B (verifiability) = {direct, indirect, counterfactual}. This replaces an earlier taxonomy of {deterministic/stochastic × closed/open}.
+- **Rationale:** The original axes were not MECE — "deterministic" and "stochastic" describe a property of the problem, not the structure of its solution set. The new axes partition by (a) whether feasible solutions exist and how many (Axis A) and (b) how strongly the outcome can be verified within the decision horizon (Axis B). These are orthogonal and exhaustive.
+- **Implications:** All conditioning rules in the pre-qualifier reference (cardinality, verifiability) not the old axes. The old taxonomy is superseded and must not appear in any new code or spec.
+
+---
+
+### [D-011] 4 boolean flags in v1 scope; each must change a scoring anchor or be deleted
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** prequal_spec.yaml (flags object: distributional, intractable, reflexive, gameable); CLAUDE.md ("flags are not decorative; each must change at least one scoring anchor or be deleted")
+- **Decision:** Four boolean property flags — distributional, intractable, reflexive, gameable — are all in scope for v1. Each flag is only retained if it changes at least one post-scorer anchor in the conditioners list.
+- **Rationale:** Decorative flags create false complexity: they appear to enrich classification without affecting scoring. If a flag has no downstream effect, it is noise that degrades trust in the classifier.
+- **Implications:** When implementing conditioners for each flag, the test must verify that at least one rubric anchor shifts when the flag is set. Any flag that cannot produce a conditioner that changes an anchor must be dropped before v1 ships.
+
+---
+
+### [D-012] Solution-verification stub for unique+direct problems
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** prequal_spec.yaml (implied by verifiability=direct conditioner); CLAUDE.md (modular periphery principle)
+- **Decision:** For problems classified as unique+direct (one correct answer, verifiable outcome), a solution-verification tool slot is reserved. In v1, the slot is a stub — the scorer evaluates confidence-evidence alignment only. A future MCP/proof-runner can be attached without changing the scoring schema.
+- **Rationale:** unique+direct problems are the only class where a formal verifier could replace the rubric's evidentiary proxies with a definitive check. Reserving the slot now avoids a schema-breaking change later. Stubbing is consistent with the modular periphery principle (D-005 implications).
+- **Implications:** The conditioners list for unique+direct must include a note about the verification stub. Post-scorer documentation must state that v1 scores confidence-evidence alignment, not verified correctness.
+
+---
+
+## Design Decisions
+
+### [D-013] 8 scoring dimensions: 6 invariant + 2 conditional
+- **Category:** Design
+- **Status:** Locked
+- **Implemented in:** rubric_spec.yaml (criterion_scores: decomposition, root_cause, tradeoff_awareness, materiality, evidentiary_grounding, feasibility, journey_coherence, calibration)
+- **Decision:** The post-scorer has 8 dimensions. Six are invariant (always scored): decomposition, root_cause, tradeoff_awareness, materiality, evidentiary_grounding, feasibility. Two are conditional: journey_coherence (N/A when process trace is absent) and calibration (N/A when problem_type classification is absent).
+- **Rationale:** Conditional dimensions allow the rubric to score more when more information is available, without requiring that information to be present. N/A is an honest score; a forced score on absent data is a false PASS.
+- **Implications:** Scorer implementation must handle N/A returns from conditional dimensions without treating them as 0s in the weighted average. Aggregation (D-008) must be defined for partial dimension sets.
+
+---
+
+### [D-014] OPEX scenario is a generator test fixture only — never baked into constitution anchor text
+- **Category:** Design
+- **Status:** Locked
+- **Implemented in:** rubric_spec.yaml (example_scenario field labeled as placeholder; opex_example fields per criterion); CLAUDE.md ("Domain-specific examples are generator test fixtures only")
+- **Decision:** The OPEX cost-overrun scenario exists only as a generator test fixture. All 40 level anchors (8 dimensions × 5 levels) use domain-independent language. One opex_example: documentation field per criterion is permitted, clearly labeled.
+- **Rationale:** Baking a domain example into anchor text would make the rubric appear to require OPEX-specific knowledge, breaking neutrality and preventing generator reuse for other domains.
+- **Implications:** Test fixtures for the generator use the OPEX case. Tests for the constitution (rubric_spec.yaml structure) must verify that anchor text contains no OPEX-specific or industry-specific terms. D-017 is a direct corollary.
+
+---
+
+### [D-015] Level-3 anchor is the "meets standard" floor
+- **Category:** Design
+- **Status:** Locked
+- **Implemented in:** rubric_spec.yaml (level 3 anchors for each dimension include the phrase "Meets standard:")
+- **Decision:** Across all 8 scoring dimensions, the level-3 anchor is defined as the minimum acceptable quality floor. It is labeled "Meets standard:" in the anchor text. Levels 1-2 describe failure modes; levels 4-5 describe above-standard performance.
+- **Rationale:** A named floor makes the scoring scale normative rather than purely ordinal. Evaluators and scorers know that a 3 means "acceptable, not excellent." This prevents grade inflation at the middle of the scale.
+- **Implications:** The post-scorer's justification (D-013) must explain when a response falls below the level-3 floor. Test proxies for falsifiability are scoped to levels 3-5 (D-016) because the floor is the diagnostic threshold.
+
+---
+
+### [D-016] Falsifiable-marker proxy tests scoped to levels 3-5 only
+- **Category:** Design
+- **Status:** Locked
+- **Implemented in:** tests/test_rubric_spec.py; commit a3b1423 ("Scope rubric_spec test proxies to levels 3-5 only")
+- **Decision:** Automated tests checking that level anchors contain falsifiable markers (specific quantities, named conditions, testable claims) apply only to levels 3, 4, and 5. Levels 1 and 2 are explicitly excluded.
+- **Rationale:** Levels 1 and 2 legitimately describe vague or absent behavior — "no decomposition" and "names at most 1 sub-component" are correctly imprecise anchors for failure modes. Requiring falsifiable markers at those levels would force artificial specificity into failure descriptions.
+- **Implications:** Any regression to applying falsifiability proxy tests to levels 1-2 is a test design bug, not a rubric bug. The test file must document this scope restriction explicitly.
+
+---
+
+### [D-017] Cost-center term proxy removed from rubric tests
+- **Category:** Design
+- **Status:** Locked
+- **Implemented in:** tests/test_rubric_spec.py (proxy removed); related to commit a3b1423
+- **Decision:** Automated tests must not check for OPEX-specific terms (e.g., "cost center," "storage," "logistics") in the rubric_spec.yaml anchor text.
+- **Rationale:** Such a test would incorrectly validate OPEX-specificity as a feature of the constitution, when D-014 requires the constitution to be domain-independent. The proxy was testing the wrong thing.
+- **Implications:** Any new test that checks for domain-specific terms in the constitution file is a defect. The generator's tests are the correct place to verify domain-specific instantiation.
+
+---
+
+### [D-018] Well-posedness gate uses PASS/BLOCK/CONDITIONAL (not binary)
+- **Category:** Design
+- **Status:** Locked
+- **Implemented in:** prequal_spec.yaml (gate enum: [PASS, BLOCK, CONDITIONAL])
+- **Decision:** The pre-qualifier gate is a ternary decision: PASS (proceed normally), BLOCK (refuse scoring), CONDITIONAL (proceed with caveats surfaced to post-scorer). Ambiguous cases default to CONDITIONAL, not PASS.
+- **Rationale:** A binary gate forces borderline framings into either full approval or full refusal. CONDITIONAL preserves the ability to score while explicitly flagging the limitation, which is more useful diagnostically than either extreme. Defaulting ambiguous cases to CONDITIONAL rather than PASS enforces conservative scoring — a false PASS is the worst outcome (D-026).
+- **Implications:** The post-scorer must consume the conditional_flag field and reflect it in the rationale. A CONDITIONAL gate with no downstream flag consumption is a schema violation.
+
+---
+
+### [D-019] block_cta must be specific — generic "please revise" is a defect
+- **Category:** Design
+- **Status:** Locked
+- **Implemented in:** prequal_spec.yaml (block_cta description: "Concrete call-to-action: what specific change would make this submission scoreable. Not a generic 'please revise.'")
+- **Decision:** When gate == BLOCK, the block_cta field must name the exact change that would make the submission scoreable. A generic instruction (e.g., "please revise your framing") fails the spec.
+- **Rationale:** Generic CTAs are useless to the consultant and mask the diagnostic signal. A specific CTA (e.g., "State a falsifiable claim: replace 'improve operations' with a specific outcome you expect to change and by how much") is actionable and calibrates the consultant's next attempt.
+- **Implications:** Validator must check block_cta specificity when reviewing pre-qualifier output. A BLOCK with a generic CTA is graded FAIL, not PASS.
+
+---
+
+### [D-020] Data sufficiency assessed only as "did framing declare data needs" — not objective sufficiency
+- **Category:** Design
+- **Status:** Locked
+- **Implemented in:** prequal_spec.yaml (data_declaration sub-check description: "data sufficiency is NOT assessed as 'is data objectively sufficient' — only: 'did the framing declare its data needs and gaps?'")
+- **Decision:** The pre-qualifier's data check evaluates only whether the consultant's framing declared what data it needs and flagged known gaps. It does not assess whether the data is objectively sufficient.
+- **Rationale:** Assessing objective sufficiency requires external ground truth about what data actually exists — which the evaluator cannot access without breaking neutrality. The declarative check is admissible because it depends only on the framing artifact.
+- **Implications:** Scorers must not penalize a consultant for having insufficient data if the framing honestly declared the gap. Penalizing data gaps that are honestly acknowledged is both inadmissible and discourages calibration (D-024).
+
+---
+
+### [D-021] Hard constraint vs soft preference declaration required in framing when material to cardinality
+- **Category:** Design
+- **Status:** Locked
+- **Implemented in:** prequal_spec.yaml (constraint_type_declaration sub-check; CONDITIONAL gate rule for undeclared constraints)
+- **Decision:** The framing must explicitly distinguish hard constraints (immovable, cardinality = 0 if violated) from soft preferences (aspirational, relaxable) when the distinction is material to classifying the solution-set cardinality. Failure to declare fires CONDITIONAL with a CTA to declare.
+- **Rationale:** Without the constraint/preference distinction, the cardinality classification is ambiguous — the same framing could be contradictory (if the constraints are hard) or multiple (if they are soft preferences). Ambiguity in cardinality propagates error through all downstream conditioners.
+- **Implications:** This is a MECE leak fix — prevents the classifier from silently assigning cardinality under ambiguous constraint types. The CTA must name which specific constraint type was undeclared.
+
+---
+
+## Ethos / Intent Decisions
+
+### [D-022] Log ALL events including BLOCK cases — data is the RL flywheel
+- **Category:** Ethos
+- **Status:** Locked
+- **Implemented in:** MEMORY.md ("Log everything — data flywheel — all events including BLOCK cases must be logged; data is the RL flywheel asset; never discard partial/failed evaluations")
+- **Decision:** Every evaluation event — including BLOCKs, CONDITIONALs, and failed evaluations — must be logged to the repository. Nothing is discarded.
+- **Rationale:** BLOCK cases are the most diagnostically valuable data points — they reveal systematic framing failures that a dataset of PASSing evaluations cannot surface. Discarding them sacrifices the RL signal needed to improve the pre-qualifier's classification accuracy.
+- **Implications:** The logging schema must capture gate decision, block_reason, block_cta, and timestamp at minimum for BLOCK events. A log pipeline that drops BLOCK events is a defect. The repository (D-005) accretes BLOCK cases alongside scored evaluations.
+
+---
+
+### [D-023] Neutrality discipline — calibration data tagged; single-operator calibration flagged
+- **Category:** Ethos
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md ("Neutrality discipline" section)
+- **Decision:** All calibration/validation data must be tagged with its source operator/engagement. If validation cases come exclusively from one operator's client work, this must be explicitly flagged as a neutrality risk. At least one independently sourced case is required before classifier thresholds are treated as validated.
+- **Rationale:** Single-operator calibration silently absorbs that operator's worldview as ground truth. This produces a scorer that is calibrated for that operator's consulting style, not for the general population of consultants — exactly the opposite of a neutral third-party authority (D-004).
+- **Implications:** The repository schema must include a `source_operator` tag on every calibration case. "Validated" is a status that requires at least one independent case. A rubric validated entirely on operator A's cases must carry a neutrality risk flag until a diverse case is added.
+
+---
+
+### [D-024] Confidence discipline — distinguish verified facts from inferences in every agent output
+- **Category:** Ethos
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md ("Confidence discipline" section)
+- **Decision:** Every agent output (validator, post-scorer, pre-qualifier, researcher) must explicitly distinguish verified facts (test passed/failed, output observed) from inferred claims (why something failed, which approach is better). Inferences must never be stated with the confidence of verified facts.
+- **Rationale:** Conflating inference with fact degrades trust in the evaluation system and produces feedback that cannot be acted on safely. A validator that states "this fails because the coder misunderstood X" is making an inference; the verified fact is only "test Y returned FAIL."
+- **Implications:** Agent output schemas should include a `confidence` or `basis` field for each finding. Validator output must separate the PASS/FAIL verdict (verified) from the diagnostic explanation (inferred). False PASSes caused by confident-sounding inferences are the worst outcome (D-026).
+
+---
+
+### [D-025] Agent model names use bare role names — version independence
+- **Category:** Ethos
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md (Roles section uses bare names: researcher, coder, test-writer, validator)
+- **Decision:** Agent model assignments use bare role names (sonnet, opus, haiku) rather than pinned version IDs (e.g., claude-opus-4-5-20251101). Version selection is delegated to the harness.
+- **Rationale:** Pinning version IDs creates maintenance overhead on every model update and couples the eval engine's logic to Anthropic's release schedule. Bare role names allow the harness operator to update model versions without touching rubric or spec files.
+- **Implications:** Any agent definition that hard-codes a version ID should be refactored to use the bare role name. The harness is responsible for resolving role name → current model ID.
+
+---
+
+### [D-026] Validator gates everything; false PASS is the worst outcome
+- **Category:** Ethos
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md ("Validator gates everything. A false PASS is failure."); validator agent definition ("A false PASS is the worst outcome.")
+- **Decision:** The validator is the constitutional gate for all work. A false PASS — approving work that does not meet acceptance criteria — is defined as the worst possible outcome, worse than a false FAIL (which wastes iteration time but does not ship broken work).
+- **Rationale:** A false FAIL causes rework; a false PASS ships a defect into the rubric that silently corrupts all downstream scores. Given that the rubric is the system's core asset (D-005), a corrupt rubric is a systemic failure, not a local one.
+- **Implications:** The validator has NO write access and must NEVER fix what it finds. Its only output is PASS/FAIL with reasons. The orchestrator (human) decides whether to send work back to the coder or accept it. Any agent that both grades and fixes is violating this constraint.
+
+---
+
+### [D-027] 2-3 parallel streams max — reviewer bandwidth is the real ceiling
+- **Category:** Ethos
+- **Status:** Locked
+- **Implemented in:** CLAUDE.md ("2-3 parallel streams max — your review bandwidth is the real ceiling.")
+- **Decision:** At most 2-3 units of work may be in flight simultaneously. The constraint is not compute or cost — it is the orchestrator's capacity to review diffs, verify acceptance criteria, and approve commits without losing context.
+- **Rationale:** More parallel streams than a human reviewer can track in a session produce rubber-stamp approvals, which degrade the validator's gate (D-026). The loop (CLAUDE.md) is designed around one unit at a time per stream; parallelism is a concession to efficiency, not an override of review quality.
+- **Implications:** The committer agent must not push more than one unit without explicit orchestrator approval of each diff. If the orchestrator is reviewing stream A, stream B must not be committed until A is resolved.

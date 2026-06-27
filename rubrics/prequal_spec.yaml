@@ -1,0 +1,474 @@
+# prequal_spec.yaml
+#
+# Spec-only document. No scoring logic, no code, no parsers, no LLM prompt
+# templates live here. This file defines the pre-qualification gate that fires
+# BEFORE post-scoring. It produces a gate decision (PASS/BLOCK/CONDITIONAL)
+# and a problem-type classification (cardinality + verifiability + flags) that
+# conditions how post-scorer dimension anchors are applied. It does NOT produce
+# 1-5 scores.
+
+description: >
+  The pre-qualifier fires on (prompt, initial_framing) before any post-scoring
+  begins. It has two jobs: (1) gate — determine whether the submission is
+  scoreable at all (PASS/BLOCK/CONDITIONAL), and (2) classify — label the
+  problem type so the post-scorer can adjust its dimension anchors accordingly.
+  The pre-qualifier produces no 1-5 scores; it produces a gate value, optional
+  block metadata, a problem-type classification on two axes (cardinality,
+  verifiability), four boolean flags (distributional, intractable, reflexive,
+  gameable), a conditioners list, and a rationale. Absence of an explicit
+  initial_framing is itself evidence for BLOCK — a missing framing is not a
+  neutral default; it signals that the problem has not been restated in a
+  testable form.
+
+io_shape:
+  input:
+    prompt:
+      type: string
+      description: The original problem statement presented to the consultant.
+    initial_framing:
+      type: string
+      description: >
+        The consultant's restatement or initial framing of the problem. Absence
+        of an explicit framing is itself evidence for BLOCK.
+  output:
+    gate:
+      type: enum
+      values: [PASS, BLOCK, CONDITIONAL]
+      description: >
+        PASS: framing is falsifiable, addresses the stated question, and
+        constraint types are declared where material — post-scoring proceeds
+        under standard anchors. BLOCK: framing is absent, unfalsifiable, or
+        substitutes a materially different question — post-scoring is refused;
+        block_reason and block_cta are required. CONDITIONAL: framing partially
+        addresses the question but introduces an unacknowledged assumption or
+        omits a required declaration — post-scoring proceeds with
+        conditional_flag surfaced to the post-scorer.
+    block_reason:
+      type: string
+      nullable: true
+      description: Non-null only when gate == BLOCK. The specific reason scoring is refused.
+    block_cta:
+      type: string
+      nullable: true
+      description: >
+        Non-null only when gate == BLOCK. Concrete call-to-action: what specific
+        change would make this submission scoreable. Not a generic "please
+        revise."
+    conditional_flag:
+      type: string
+      nullable: true
+      description: >
+        Non-null only when gate == CONDITIONAL. The framing assumption that must
+        be surfaced to the post-scorer.
+    cardinality:
+      type: enum
+      values: [contradictory, unique, multiple]
+      description: >
+        Axis A — structure of the solution set S = {candidate solutions
+        satisfying stated hard constraints}. contradictory: |S| = 0.
+        unique: |S| = 1. multiple: |S| > 1.
+    verifiability:
+      type: enum
+      values: [direct, indirect, counterfactual]
+      description: >
+        Axis B — strongest outcome signal obtainable within the decision
+        horizon. direct: realized outcome observable on target metric.
+        indirect: measurable proxies or lagged indicators obtainable.
+        counterfactual: outcome only definable relative to an unobservable
+        counterfactual.
+    flags:
+      type: object
+      properties:
+        distributional:
+          type: boolean
+          description: Correct answer is a distribution, not a point estimate.
+        intractable:
+          type: boolean
+          description: >
+            Exact optimal solution exists but is not findable in polynomial
+            time (NP-hard).
+        reflexive:
+          type: boolean
+          description: >
+            Solving or publishing the solution changes the problem (system
+            responds to intervention).
+        gameable:
+          type: boolean
+          description: The best outcome signal is Goodhart-corruptible (metric gaming).
+    conditioners:
+      type: array
+      items: string
+      description: >
+        Advisory notes for the post-scorer on how this classification shifts
+        dimension anchors. Populated from conditioning_map rules that match
+        the current (cardinality, verifiability, flags) combination.
+    rationale:
+      type: string
+      description: >
+        2-4 sentences justifying gate and classification decisions. Distinguishes
+        observations (directly readable from the framing) from inferences
+        (judgments requiring interpretation).
+
+checks:
+  - id: well_posedness_gate
+    type: gate
+    output_values: [PASS, BLOCK, CONDITIONAL]
+    description: >
+      Tests whether the framing is falsifiable, specific, and addresses the
+      stated question rather than substituting an easier one ("question
+      substitution"). Also requires that hard constraints be distinguished
+      from soft preferences when constraints are material to classification.
+    sub_checks:
+      - id: falsifiability
+        description: >
+          Is there a specific, falsifiable claim being diagnosed? (Not "make
+          us better" — a testable question.)
+      - id: question_alignment
+        description: >
+          Does the framing address the stated question, or does it substitute
+          a different/easier one?
+      - id: constraint_type_declaration
+        description: >
+          Are hard constraints (immovable, |S|=0 if violated) distinguished
+          from soft preferences (aspirational, relaxable)? Required when
+          constraints are material to determining cardinality. If not
+          declared, CONDITIONAL with CTA to declare.
+      - id: data_declaration
+        description: >
+          Did the framing declare what data/artifacts it needs and flag known
+          gaps? Note: data sufficiency is NOT assessed as "is data objectively
+          sufficient" (requires external ground truth — inadmissible). Only:
+          "did the framing declare its data needs and gaps?"
+    gate_rules:
+      BLOCK:
+        conditions:
+          - Framing is absent or empty
+          - Framing is unfalsifiable (no testable claim, e.g. "make us world-class")
+          - Framing substitutes a materially different question than the one stated
+        consequences: >
+          No post-scoring. block_reason and block_cta required. cardinality,
+          verifiability, and flags are still populated — data is the flywheel;
+          log all fields even on BLOCK.
+      CONDITIONAL:
+        conditions:
+          - Framing partially addresses the question but introduces an unacknowledged assumption
+          - Hard constraints and soft preferences not distinguished when material
+          - Data needs not declared
+        consequences: >
+          Post-scoring proceeds with conditional_flag surfaced to post-scorer.
+      PASS:
+        conditions:
+          - >
+            Framing is falsifiable, addresses the stated question, and constraint
+            types are declared where material.
+    block_cta_requirements: >
+      Must name the specific change needed: the missing falsifiable question,
+      the substitution being made, or the constraint-type declaration required.
+      Generic "please revise" is a defect.
+
+  - id: problem_type_classifier
+    type: classifier
+    description: >
+      Classifies the problem on two independent axes (cardinality, verifiability)
+      and sets four boolean flags (distributional, intractable, reflexive,
+      gameable). Each axis is MECE over its value set. Flags are orthogonal and
+      may co-occur with any (cardinality, verifiability) combination.
+    axes:
+      - id: cardinality_classifier
+        axis: A
+        description: >
+          Classifies the structure of the solution set S = {candidate solutions
+          satisfying the problem's stated hard constraints}. MECE proof: |S| is
+          a non-negative integer; |S| ∈ {0, 1, >1} partitions all non-negative
+          integers exhaustively and mutually exclusively.
+        values:
+          - id: contradictory
+            definition: >
+              |S| = 0 — the stated hard constraints cannot be jointly satisfied.
+            classification_rule: >
+              Extract stated hard constraints from the framing. If two or more
+              are mutually exclusive (satisfying one logically requires violating
+              another), classify as contradictory. Requires constraint-type
+              declaration from well_posedness_gate.
+            downstream_anchor_shifts:
+              tradeoff_awareness: >
+                Re-anchor: the scored behavior is surfacing the constraint
+                conflict and recommending which constraint to relax and on what
+                basis — not naming second-order effects of an intervention.
+
+          - id: unique
+            definition: >
+              |S| = 1 — exactly one solution satisfies the stated constraints.
+            classification_rule: >
+              Constraints plus available data pin down a single answer (e.g., a
+              closed ledger with one feasible allocation). If the framing implies
+              one correct answer exists and is findable, classify as unique.
+            downstream_anchor_shifts:
+              calibration: >
+                Solution-verification stub active when cardinality=unique AND
+                verifiability=direct: calibration also checks whether proposed
+                solution satisfies stated constraints. Tool slot reserved for
+                future MCP/proof-runner integration; v1 scores
+                confidence-evidence alignment only and notes the stub.
+              root_cause: >
+                Final-answer correctness is gradeable against the stated
+                constraint set.
+
+          - id: multiple
+            definition: >
+              |S| > 1 — many valid solutions co-exist; constraints leave free
+              parameters.
+            classification_rule: >
+              Most open-ended diagnostic problems are multiple. If the framing
+              does not imply a unique answer, classify as multiple.
+            downstream_anchor_shifts:
+              decomposition: >
+                Reward structured option-space and decision criteria. Do not
+                penalize absence of a single answer. Penalize false claims of
+                a unique optimum.
+              root_cause: >
+                Multiple valid root causes may co-exist; reward prioritization
+                over forced convergence to a single cause.
+
+        mece_proof: >
+          |S| ∈ {0, 1, >1} is a partition of all non-negative integers:
+          mutually exclusive (a cardinality is exactly one of these three) and
+          collectively exhaustive (all possible cardinalities are covered).
+          Boundary judgment: the partition is only as clean as what counts as
+          a "hard" constraint — see constraint_type_declaration sub-check.
+          MECE holds at the classification-logic level, not at the
+          judge-infallibility level.
+
+      - id: verifiability_classifier
+        axis: B
+        description: >
+          Classifies the strongest outcome signal obtainable within the
+          problem's stated decision horizon. An ordered ladder: assign the
+          highest achievable rung. MECE proof: mutual exclusivity via the
+          "best available" rule; exhaustivity because every problem has a
+          signal level (even "no direct signal" resolves to counterfactual).
+          Requires the decision horizon to be stated in the framing; if absent,
+          fire CONDITIONAL.
+        values:
+          - id: direct
+            definition: >
+              Realized outcome observable on the target metric within the stated
+              decision horizon.
+            classification_rule: >
+              The framing names a specific metric whose realized value will be
+              observable without significant delay or inferential step.
+            downstream_anchor_shifts:
+              calibration: >
+                Permit firm claims where evidence supports them; over-hedging
+                penalized.
+              feasibility: >
+                Hard-verification design expected in recommendations; proxy
+                signals alone score ≤3.
+
+          - id: indirect
+            definition: >
+              No direct outcome signal within the horizon, but measurable
+              proxies or lagged indicators are obtainable.
+            classification_rule: >
+              Outcome real but slow (long lag) or only leading indicators
+              available.
+            downstream_anchor_shifts:
+              feasibility: >
+                Reward explicit proxy/leading-indicator design. Penalize claims
+                of confirmed direct impact.
+              calibration: >
+                Reward explicit acknowledgment of the inferential step from
+                proxy to outcome.
+
+          - id: counterfactual
+            definition: >
+              Outcome only definable relative to an unobservable counterfactual.
+            classification_rule: >
+              No direct or proxy signal cleanly attributes the outcome to the
+              recommendation without a controlled comparison that cannot be run.
+            downstream_anchor_shifts:
+              feasibility: >
+                Level-3 floor: names ≥1 proxy signal for approximating success
+                with explicit acknowledgment of the counterfactual limitation.
+                Hard verification not required.
+              calibration: >
+                Suppress unqualified causal-impact claims. Reward counterfactual
+                framing. Penalize confident point-estimate impact claims.
+
+        mece_proof: >
+          Assign the highest achievable rung. Rungs are ordered: direct ⊃
+          indirect ⊃ counterfactual. Mutual exclusivity via "best available"
+          rule. Exhaustivity: every problem maps to at least counterfactual
+          (even if no signal, the outcome is defined only vs the unobservable
+          counterfactual). Boundary judgment: requires decision horizon to be
+          stated.
+
+    flags:
+      - id: distributional
+        type: boolean
+        definition: Correct answer is a distribution, not a point estimate.
+        set_when: Framing implies a distribution of outcomes, not one right answer.
+        downstream_anchor_shifts:
+          evidentiary_grounding: >
+            Probabilistic/scenario-based bases acceptable at level ≥3.
+          calibration: >
+            Penalize spurious precision; reward stated uncertainty ranges.
+
+      - id: intractable
+        type: boolean
+        definition: >
+          Exact optimal solution exists but is not findable in polynomial time
+          (NP-hard).
+        set_when: >
+          Problem involves combinatorial optimization where exhaustive search
+          is infeasible.
+        downstream_anchor_shifts:
+          feasibility: >
+            Do not penalize absence of global optimum; reward principled
+            heuristics.
+          root_cause: >
+            Near-optimal solutions acceptable at level ≥3.
+
+      - id: reflexive
+        type: boolean
+        definition: >
+          Solving or publishing the solution changes the problem (system
+          responds to intervention).
+        set_when: >
+          Framing implies the recommendation will shift competitor, customer,
+          or system behavior.
+        downstream_anchor_shifts:
+          tradeoff_awareness: >
+            Reward monitoring/adaptation/sequencing; penalize one-shot
+            final-answer framing.
+          feasibility: >
+            Reward phased rollout and trigger-condition design.
+
+      - id: gameable
+        type: boolean
+        definition: The best outcome signal is Goodhart-corruptible (metric gaming).
+        set_when: Success metric has known or plausible gaming paths.
+        downstream_anchor_shifts:
+          tradeoff_awareness: >
+            Reward anti-gaming guardrail design; penalize naive single-metric
+            targets.
+          feasibility: >
+            Reward multi-metric outcome design.
+
+conditioning_map:
+  description: >
+    How each problem_type combination conditions post-scorer dimension anchors.
+    Post-scorer reads these rules and adjusts level thresholds without changing
+    dimension keys.
+  rules:
+    - condition: "cardinality == contradictory"
+      modifies:
+        tradeoff_awareness: >
+          surface constraint conflict + recommend relaxation/prioritization
+    - condition: "cardinality == unique AND verifiability == direct"
+      modifies:
+        calibration: >
+          solution-verification stub active (v1: confidence-evidence alignment
+          only)
+    - condition: "verifiability == counterfactual"
+      modifies:
+        feasibility: >
+          level-3 floor: names ≥1 proxy signal with explicit counterfactual
+          acknowledgment
+        calibration: >
+          suppress unqualified causal claims; reward counterfactual framing
+    - condition: "flags.distributional == true"
+      modifies:
+        evidentiary_grounding: >
+          probabilistic bases acceptable at level ≥3
+        calibration: >
+          penalize point precision; reward uncertainty ranges
+    - condition: "flags.intractable == true"
+      modifies:
+        feasibility: >
+          do not penalize absence of global optimum; reward heuristics
+        root_cause: >
+          near-optimal acceptable at level ≥3
+    - condition: "flags.reflexive == true"
+      modifies:
+        tradeoff_awareness: >
+          reward adaptation/sequencing; penalize one-shot framing
+    - condition: "flags.gameable == true"
+      modifies:
+        tradeoff_awareness: >
+          reward anti-gaming guardrails; penalize naive single-metric targets
+
+fixtures:
+  description: >
+    Worked classification examples for testing. These are generator outputs —
+    domain-specific classifications — not part of the constitution. Sourced
+    independently where noted.
+  examples:
+    - id: opex_cost_overrun
+      source: primary_operator
+      neutrality_flag: >
+        Sourced from primary operator's scenario. Calibration against this
+        fixture alone constitutes a neutrality risk — requires independent
+        validation before thresholds are treated as validated.
+      prompt: >
+        A company faces high OPEX costs far exceeding budget across storage &
+        handling, selling & marketing, and logistics. Diagnose and recommend
+        solutions.
+      expected:
+        gate: PASS
+        cardinality: multiple
+        verifiability: indirect
+        flags:
+          distributional: false
+          intractable: false
+          reflexive: false
+          gameable: true
+      rationale: >
+        Many valid diagnostic paths exist (multiple). Cost savings accrue over
+        months via contract and process changes (indirect). Cost metrics are
+        gameable by deferring spend to next period (gameable).
+
+    - id: market_entry
+      source: independent
+      prompt: >
+        Should we enter geography X? Assess feasibility and recommend an
+        approach.
+      expected:
+        gate: PASS
+        cardinality: multiple
+        verifiability: counterfactual
+        flags:
+          distributional: true
+          intractable: false
+          reflexive: true
+          gameable: false
+      rationale: >
+        Many valid entry/no-entry/partner/JV paths (multiple). Success only
+        definable vs unobservable counterfactual of not entering
+        (counterfactual). Market sizing inherently distributional
+        (distributional). Entry shifts incumbent response (reflexive).
+
+    - id: underdetermined_system
+      source: independent
+      prompt: >
+        Solve: x + y + z = 10, 2x - 5y = 90.
+      expected:
+        gate: PASS
+        cardinality: multiple
+        verifiability: direct
+        flags:
+          distributional: false
+          intractable: false
+          reflexive: false
+          gameable: false
+      rationale: >
+        3 unknowns, 2 independent equations — underdetermined, infinitely many
+        solutions (multiple, |S|>1). Solutions are verifiable by substitution
+        (direct). No stochastic or reflexive component.
+
+neutrality_note: >
+  The opex_cost_overrun fixture is sourced from the primary operator scenario.
+  Classifier thresholds calibrated against this fixture alone absorb one
+  operator's worldview as ground truth. The market_entry and
+  underdetermined_system fixtures are independently sourced and satisfy the
+  CLAUDE.md requirement for at least one independent validation case.

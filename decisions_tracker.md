@@ -281,3 +281,45 @@
 - **Decision:** At most 2-3 units of work may be in flight simultaneously. The constraint is not compute or cost — it is the orchestrator's capacity to review diffs, verify acceptance criteria, and approve commits without losing context.
 - **Rationale:** More parallel streams than a human reviewer can track in a session produce rubber-stamp approvals, which degrade the validator's gate (D-026). The loop (CLAUDE.md) is designed around one unit at a time per stream; parallelism is a concession to efficiency, not an override of review quality.
 - **Implications:** The committer agent must not push more than one unit without explicit orchestrator approval of each diff. If the orchestrator is reviewing stream A, stream B must not be committed until A is resolved.
+
+---
+
+## Architecture Decisions (continued)
+
+### [D-028] Two input formats supported: transcript (A) and structured response (B)
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** transcript-parser.md, detect_format.py, rubric_spec.yaml (input_format field), prequal_spec.yaml
+- **Decision:** The eval engine accepts two input formats: Format A (conversational interview transcript with interleaved interviewer/candidate turns) and Format B (polished structured response). Format detection is deterministic (regex, <100ms). Format A routes through transcript-parser first; Format B goes directly to pre-qualifier.
+- **Rationale:** IIMA casebook provides both formats. Excluding transcripts would discard the primary training corpus. Excluding structured responses would prevent evaluation of deliverable-format submissions.
+- **Implications:** transcript-parser output must include `input_format: "transcript"` so downstream agents apply the correct scoring conditioners (e.g., journey_coherence is N/A without a reasoning trace).
+
+---
+
+### [D-029] Parser improvement loop: evaluator judges, fixer patches, never coupled
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** parser-evaluator.md, parser-fixer.md
+- **Decision:** Parser quality improvement uses a two-agent loop. The evaluator (neutral judge) assesses extraction quality across 5 dimensions and issues PASS/FLAG/FAIL. The fixer (operator) reads only the failure log and generates prompt patches — never the evaluator's criteria. These are separate agents that never share context.
+- **Rationale:** If the fixer knew the evaluator's criteria, it could game the evaluation rather than improve actual extraction quality. Separation maintains the neutrality principle (D-023) within the parser loop itself.
+- **Implications:** Evaluator output (verdict + failure log) is the only interface between judge and fixer. The fixer must not read parser-evaluator.md. Validator checks this separation in any PR touching either agent.
+
+---
+
+### [D-030] Credential management: macOS Keychain only — never .env or plaintext files
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** scripts/setup_keychain.sh, scripts/run_parser.sh, scripts/parse_transcript.py
+- **Decision:** The Anthropic API key for the direct-API parser path is stored in macOS Keychain under service=eval-engine, account=anthropic. Scripts read it via `security find-generic-password` at runtime. No .env file. No plaintext storage on disk.
+- **Rationale:** .env files are readable by any process with filesystem access to the project directory. Keychain is encrypted at rest, requires OS authentication, and is not readable by third-party processes without explicit permission grant.
+- **Implications:** The `parse_transcript.py` error message for missing key directs to Keychain, not .env. The .pip_deps/ and .env are both in .gitignore. Production deployment uses a secrets manager (AWS SM / Vault) as the equivalent.
+
+---
+
+### [D-031] Parser latency: haiku agent (~2.5min) acceptable for MVP; direct API (<10s) deferred to when credits available
+- **Category:** Architecture
+- **Status:** Active
+- **Implemented in:** transcript-parser.md (model: haiku), parse_transcript.py (direct API path, staged)
+- **Decision:** For MVP, the haiku agent (using claude.ai Pro OAuth) is the parser. The direct Anthropic API path (parse_transcript.py) is built and ready but requires API credits on a separate account. Switch to API path when credits are funded.
+- **Rationale:** Agent startup overhead is 10–15s regardless of model; haiku inference adds ~8s; total ~2.5min per document. This is acceptable for batch evaluation. The API path targets <10s but requires a funded API key separate from the claude.ai subscription OAuth.
+- **Implications:** Any live-action use case requiring <30s parse time must use the direct API path. Do not use the haiku agent in a real-time pipeline until latency is resolved.

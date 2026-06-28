@@ -1,0 +1,31 @@
+# Multi-Project Construction Resource Conflict — Contradictory Scheduling Constraints Across Concurrent Builds
+
+## Industry & Value Chain
+- **Industry:** Construction / Infrastructure
+- **Company type:** Regional general contractor (~$1.4B annual revenue, specializing in public infrastructure — bridges, transit, water treatment)
+- **Value chain position:** Operations / Multi-project scheduling
+- **Source reference:** Synthesized from ResearchGate resource-constrained project scheduling case study (researchgate.net/publication/264438997_Resource-constrained-project-scheduling-A-case-study) + ALICE Technologies industrial construction delay cascade analysis (blog.alicetechnologies.com/planners-guide-delays-industrial-construction-projects) + Wiley resource-constrained multi-project scheduling practices (hindawi.com/journals/ace/2018/9579273/)
+
+## Business Context
+A regional general contractor has won three simultaneous public infrastructure contracts that are now in concurrent execution: a $240M highway bridge replacement (Project Alpha, 28-month duration, 19 months remaining), a $180M water treatment facility upgrade (Project Beta, 22-month duration, 14 months remaining), and a $95M light-rail elevated guideway section (Project Gamma, 18-month duration, 11 months remaining). All three projects are funded by state and federal grants with fixed milestone payment schedules and liquidated-damage clauses of $45K–$75K per day of delay. A workforce analysis completed last month identified that all three projects require peak certified ironworker crews (union classification W-7) simultaneously during months 4-7 of the current schedule — a 16-week window in which the combined demand for W-7 ironworkers across all three projects is 187 FTE, while the contractor's certified roster and available subcontractor capacity within the regional union hall is a hard ceiling of 140 FTE. The gap of 47 FTE cannot be filled by importing labor from outside the regional labor agreement without triggering a union grievance.
+
+## Problem Statement
+> The project controls director must produce a resource-leveled master schedule within the next 30 days (before the next owner progress meetings on all three projects) that resolves the 47-FTE ironworker deficit during the months 4-7 conflict window. The plan must be technically executable — all schedule changes must comply with each project's contract critical path provisions — and must minimize total liquidated-damage exposure across all three projects. The plan must specify: (a) which activities on which projects are to be resequenced, accelerated, or deferred and by how many weeks; (b) the resulting critical path on each project; (c) the total liquidated-damage exposure under the revised schedule; and (d) any constraint that is impossible to satisfy simultaneously — identifying which contract obligation must be renegotiated with the relevant public owner and the estimated renegotiation cost or penalty. There is no solution that satisfies all three contracts' original milestone dates with available labor — the problem requires explicit identification of which constraint must be violated and by how much.
+
+## Key Constraints
+- **Hard:** Regional union agreement caps W-7 ironworker supply at 140 FTE from the regional hall; importing labor from outside the agreement triggers an automatic grievance (binding arbitration with 60-day freeze on the disputed labor)
+- **Hard:** Each project's liquidated-damage clause is active from day one of a missed milestone — there is no grace period or cure window beyond the originally contracted completion date
+- **Hard:** Project Alpha (bridge replacement) carries a Federal Highway Administration safety-of-traffic requirement: the bridge must be passable at minimum two lanes by a specific interim milestone that cannot be deferred without FHWA waiver (waiver timeline: minimum 90 days, not guaranteed)
+- **Soft:** Project Beta's public owner (municipal water authority) has indicated informally that a 3-4 week schedule extension may be negotiable in exchange for a credit on future change orders — this is unconfirmed and cannot be relied upon as a planning assumption
+- **Soft:** Project Gamma's light-rail owner has a "concurrent delay" clause that may limit LD exposure if the GC can demonstrate the labor shortage constitutes a force majeure event — legal counsel rates this argument as viable but uncertain
+
+## Available Data / Known Gaps
+- **Available:** Detailed CPM schedules for all three projects (Primavera P6, 2,100 total activities); resource-loaded schedule with W-7 FTE assignments by activity and week; union agreement labor supply terms; contract milestone and LD schedules for all three projects; FHWA interim milestone documentation for Project Alpha; legal opinion on force majeure and concurrent delay clauses
+- **Gaps:** The water authority's informal willingness to negotiate has not been confirmed in writing and cannot be modeled as a firm option; the probability of winning a force majeure argument under Project Gamma's specific contract language has not been formally assessed; alternative ironworker substitution (e.g., W-9 structural welders) may cover some W-7 scope but requires engineering review that has not been completed; subcontractor capacity beyond the regional hall has not been formally surveyed
+
+## Pre-Qualifier Annotation
+*(For generator reference — not seen by consultant)*
+- **Cardinality:** contradictory
+- **Verifiability:** direct
+- **Flags:** distributional: false, intractable: false, reflexive: false, gameable: false
+- **Classification rationale:** Contradictory because the joint constraint set (187 FTE demand, 140 FTE supply ceiling, no grace periods, three immovable milestone structures) cannot be simultaneously satisfied — the problem explicitly requires identifying which constraint must be violated. Verifiability is direct because liquidated damage exposure is a contractually defined, immediately calculable outcome of the schedule, and milestone dates are observable calendar facts. No distributional, reflexive, or gameable elements are present: the problem has a specific quantified cost of each schedule configuration, and the outcome metric (LD exposure) is not manipulable.

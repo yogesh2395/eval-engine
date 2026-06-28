@@ -9,13 +9,13 @@ CLI:
 For each case:
   a. detect_format.py  (subprocess) → logs/runs/<ts>/<case_id>/format_detection.json
   b. preprocess_input.py (subprocess) → logs/runs/<ts>/<case_id>/preprocessed.txt
-  c. parse_transcript.parse() (direct import) → logs/runs/<ts>/<case_id>/parse_output.json
-  d. parser-evaluator (Anthropic API, sonnet) → logs/runs/<ts>/<case_id>/eval_output.json
+  c. transcript-parser agent (claude CLI) → logs/runs/<ts>/<case_id>/parse_output.json
+  d. parser-evaluator agent (claude CLI) → logs/runs/<ts>/<case_id>/eval_output.json
 
 Writes logs/runs/<ts>/summary.json and prints a one-line summary to stdout.
 Never reads from examples/testing_set/.
 
-Requires ANTHROPIC_API_KEY in the shell environment.
+Uses the `claude` CLI (Pro auth) — no ANTHROPIC_API_KEY required.
 """
 
 import sys
@@ -31,147 +31,110 @@ from datetime import datetime
 REPO_ROOT   = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 TESTING_DIR = REPO_ROOT / "examples" / "testing_set"
-AGENT_FILE         = REPO_ROOT / ".claude" / "agents" / "parser-evaluator.md"
-PARSER_AGENT_FILE  = REPO_ROOT / ".claude" / "agents" / "transcript-parser.md"
-PARSER_MODEL       = "claude-haiku-4-5-20251001"
 LOGS_DIR    = REPO_ROOT / "logs" / "runs"
 
-# ── extend sys.path (same pattern as parse_transcript.py) ─────────────────
-_pip_deps = str(REPO_ROOT / ".pip_deps")
-if _pip_deps not in sys.path:
-    sys.path.insert(0, _pip_deps)
+
+# ── shared JSON extraction ─────────────────────────────────────────────────
+
+def _extract_json(raw: str) -> dict:
+    """Extract JSON object from agent output, tolerating leading/trailing text."""
+    # Strip accidental markdown code fence
+    if "```" in raw:
+        start = raw.find("```") + 3
+        # skip optional language tag on same line
+        if "\n" in raw[start:]:
+            start = raw.index("\n", start) + 1
+        end = raw.rfind("```")
+        raw = raw[start:end].strip()
+
+    # Try direct parse first (agent followed instructions exactly)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    # Fall back: find outermost { ... } in case there is preamble/postamble text
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            return json.loads(raw[start : end + 1])
+        except json.JSONDecodeError as exc:
+            return {"error": f"JSON parse failed: {exc}", "raw": raw[:500]}
+
+    return {"error": "No JSON object found in agent output", "raw": raw[:500]}
+
+
+# ── parser helpers ────────────────────────────────────────────────────────
+
+def _call_parser(case_path: str) -> dict:
+    """
+    Call transcript-parser agent via the claude CLI.
+    Returns the parsed JSON dict or {"error": "..."}.
+    """
+    t0 = time.time()
+    result = subprocess.run(
+        [
+            "claude",
+            "-p", f"Parse this case interview file: {case_path}",
+            "--agent", "transcript-parser",
+            "--output-format", "text",
+            "--dangerously-skip-permissions",
+            "--no-session-persistence",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    latency_ms = int((time.time() - t0) * 1000)
+
+    if result.returncode != 0:
+        return {"error": f"agent failed: {result.stderr[:200]}"}
+
+    raw = result.stdout.strip()
+    parsed = _extract_json(raw)
+    if "error" in parsed:
+        return parsed
+
+    parsed["_parser_meta"] = {
+        "agent": "transcript-parser",
+        "latency_ms": latency_ms,
+        "file": case_path,
+    }
+    print(f"[parser] {latency_ms}ms", file=sys.stderr)
+    return parsed
 
 
 # ── evaluator helpers ──────────────────────────────────────────────────────
 
-def _load_evaluator_prompt() -> str:
-    """Read parser-evaluator.md; strip YAML frontmatter (between first two ---)."""
-    with open(AGENT_FILE, "r", encoding="utf-8") as f:
-        lines = f.read().splitlines()
-
-    if lines and lines[0].strip() == "---":
-        for i in range(1, len(lines)):
-            if lines[i].strip() == "---":
-                lines = lines[i + 1:]
-                break
-
-    return "\n".join(lines).strip()
-
-
-def _call_evaluator(parse_output: dict, case_path: str, api_key: str) -> dict:
+def _call_evaluator(parse_output: dict, case_path: str) -> dict:
     """
-    Call parser-evaluator via Anthropic API (claude-sonnet-4-6).
+    Call parser-evaluator agent via the claude CLI.
     Returns the parsed JSON dict or {"error": "..."}.
     """
-    try:
-        import anthropic
-    except ImportError:
-        return {"error": "anthropic package not found in .pip_deps"}
-
-    system_prompt = _load_evaluator_prompt()
-    client = anthropic.Anthropic(api_key=api_key)
-
     user_msg = (
         "Evaluate this parser output.\n\n"
         f"Original case file path: {case_path}\n\n"
         f"Parser output:\n{json.dumps(parse_output, indent=2)}"
     )
-
-    try:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2048,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_msg}],
-        )
-    except Exception as exc:
-        return {"error": f"API call failed: {exc}"}
-
-    raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
-        raw = raw.rsplit("```", 1)[0].strip()
-
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        return {"error": f"JSON parse failed: {exc}", "raw": raw[:500]}
-
-
-# ── parser helpers ────────────────────────────────────────────────────────
-
-def _load_parser_prompt() -> str:
-    """Read transcript-parser.md; strip YAML frontmatter (between first two ---)."""
-    with open(PARSER_AGENT_FILE, "r", encoding="utf-8") as f:
-        lines = f.read().splitlines()
-
-    if lines and lines[0].strip() == "---":
-        for i in range(1, len(lines)):
-            if lines[i].strip() == "---":
-                lines = lines[i + 1:]
-                break
-
-    return "\n".join(lines).strip()
-
-
-def _call_parser(case_path: str, api_key: str) -> dict:
-    """
-    Call transcript-parser agent via Anthropic API (haiku).
-    Reads case file, uses transcript-parser.md as system prompt.
-    Returns the parsed JSON dict or {"error": "..."}.
-    """
-    try:
-        with open(case_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-    except Exception as exc:
-        return {"error": f"File read failed: {exc}", "path": case_path}
-
-    try:
-        import anthropic
-    except ImportError:
-        return {"error": "anthropic package not found in .pip_deps"}
-
-    t0 = time.time()
-    system_prompt = _load_parser_prompt()
-    client = anthropic.Anthropic(api_key=api_key)
-
-    try:
-        response = client.messages.create(
-            model=PARSER_MODEL,
-            max_tokens=4096,
-            system=system_prompt,
-            messages=[{
-                "role": "user",
-                "content": f"Parse this case interview file.\n\nFile: {case_path}\n\n{content}",
-            }],
-        )
-    except Exception as exc:
-        return {"error": f"API call failed: {exc}"}
-
-    latency_ms = int((time.time() - t0) * 1000)
-    raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
-        raw = raw.rsplit("```", 1)[0].strip()
-
-    try:
-        result = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        return {"error": f"JSON parse failed: {exc}", "raw": raw[:500], "latency_ms": latency_ms}
-
-    result["_parser_meta"] = {
-        "latency_ms": latency_ms,
-        "model": PARSER_MODEL,
-        "agent_file": str(PARSER_AGENT_FILE),
-        "input_tokens": response.usage.input_tokens,
-        "output_tokens": response.usage.output_tokens,
-        "file": case_path,
-    }
-    print(
-        f"[parser] {latency_ms}ms | in={response.usage.input_tokens} out={response.usage.output_tokens}",
-        file=sys.stderr,
+    result = subprocess.run(
+        [
+            "claude",
+            "-p", user_msg,
+            "--agent", "parser-evaluator",
+            "--output-format", "text",
+            "--dangerously-skip-permissions",
+            "--no-session-persistence",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
     )
-    return result
+
+    if result.returncode != 0:
+        return {"error": f"agent failed: {result.stderr[:200]}"}
+
+    return _extract_json(result.stdout.strip())
 
 
 # ── subprocess wrappers ────────────────────────────────────────────────────
@@ -274,16 +237,6 @@ def main():
     parser.add_argument("--manifest", type=str,  default=None, help="Path to pre-built manifest JSON")
     args = parser.parse_args()
 
-    # ── API key check ──────────────────────────────────────────────────────
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        print(
-            "[eval_loop] ERROR: ANTHROPIC_API_KEY not set. "
-            "Export it before running (never write to disk).",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
     # ── load manifest ──────────────────────────────────────────────────────
     if args.manifest:
         with open(args.manifest, "r", encoding="utf-8") as f:
@@ -329,8 +282,8 @@ def main():
             # Write an empty stub so downstream artifacts aren't missing
             Path(preprocessed_path).write_text("", encoding="utf-8")
 
-        # (c) parse via transcript-parser.md agent (haiku)
-        parse_result = _call_parser(case_path, api_key)
+        # (c) parse via transcript-parser agent (claude CLI)
+        parse_result = _call_parser(case_path)
 
         (case_dir / "parse_output.json").write_text(json.dumps(parse_result, indent=2))
 
@@ -344,8 +297,8 @@ def main():
             )
             continue
 
-        # (d) parser-evaluator
-        eval_result = _call_evaluator(parse_result, case_path, api_key)
+        # (d) parser-evaluator agent (claude CLI)
+        eval_result = _call_evaluator(parse_result, case_path)
         (case_dir / "eval_output.json").write_text(json.dumps(eval_result, indent=2))
 
         if "error" in eval_result:

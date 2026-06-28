@@ -239,35 +239,23 @@ class TestEvalLoop:
             f"scripts/eval_loop.py not found at {SCRIPTS_DIR / 'eval_loop.py'}"
         )
 
-    # AC 2: AGENT_FILE constant points to .claude/agents/parser-evaluator.md
-    def test_agent_file_constant_points_to_parser_evaluator(self, el):
-        assert hasattr(el, "AGENT_FILE"), "AGENT_FILE constant not found in eval_loop.py"
-        path_str = str(el.AGENT_FILE)
-        assert ".claude" in path_str, (
-            f"AGENT_FILE must include '.claude' in path; got {path_str!r}"
+    # AC 2: Uses claude CLI --agent flags (not direct API calls)
+    def test_uses_claude_cli_agent_flags(self, source):
+        assert "--agent" in source, "eval_loop.py must use claude CLI --agent flag"
+        assert "transcript-parser" in source, (
+            "eval_loop.py must reference 'transcript-parser' agent name"
         )
-        assert "agents" in path_str, (
-            f"AGENT_FILE must include 'agents' in path; got {path_str!r}"
-        )
-        assert "parser-evaluator.md" in path_str, (
-            f"AGENT_FILE must reference 'parser-evaluator.md'; got {path_str!r}"
+        assert "parser-evaluator" in source, (
+            "eval_loop.py must reference 'parser-evaluator' agent name"
         )
 
-    # AC 3: _load_evaluator_prompt() strips YAML frontmatter
-    #        Tested with an in-memory fake file — no disk I/O.
-    def test_load_evaluator_prompt_strips_frontmatter(self, el):
-        fake_content = "---\nmodel: sonnet\ndescription: test agent\n---\nThis is the body."
-        with patch("builtins.open", mock_open(read_data=fake_content)):
-            result = el._load_evaluator_prompt()
-        assert result == "This is the body.", (
-            f"_load_evaluator_prompt must strip YAML frontmatter and return only body; "
-            f"got: {result!r}"
+    # AC 3: No direct Anthropic API calls (uses Pro auth via claude CLI)
+    def test_no_direct_api_calls(self, source):
+        assert "anthropic.Anthropic(" not in source, (
+            "eval_loop.py must NOT use anthropic.Anthropic() — use claude CLI instead"
         )
-        assert "model: sonnet" not in result, (
-            "Frontmatter key 'model: sonnet' must be absent from stripped result"
-        )
-        assert "description: test agent" not in result, (
-            "Frontmatter key 'description: test agent' must be absent from stripped result"
+        assert 'os.environ.get("ANTHROPIC_API_KEY"' not in source, (
+            "eval_loop.py must NOT read ANTHROPIC_API_KEY from env — Pro auth via claude CLI"
         )
 
     # AC 4: _compute_dimension_pass_rates([]) → dict with all 5 keys, all None
@@ -351,27 +339,25 @@ class TestEvalLoop:
             f"_worst_dimension must return None when all rates are None; got {result!r}"
         )
 
-    # AC 9a: Evaluator model is claude-sonnet-4-6
-    def test_call_evaluator_uses_claude_sonnet_4_6_model(self, source):
-        assert "claude-sonnet-4-6" in source, (
-            "eval_loop.py must specify model 'claude-sonnet-4-6' in _call_evaluator; "
-            "string not found in source"
-        )
+    # AC 9: _extract_json handles code-fence and preamble text
+    def test_extract_json_strips_code_fence(self, el):
+        raw = "```json\n{\"verdict\": \"PASS\"}\n```"
+        result = el._extract_json(raw)
+        assert result == {"verdict": "PASS"}, f"_extract_json must strip code fence; got {result}"
 
-    # AC 9b: Parser model is claude-haiku-4-5-20251001 (via PARSER_MODEL constant)
-    def test_call_parser_uses_haiku_model(self, source):
-        assert "claude-haiku-4-5-20251001" in source, (
-            "eval_loop.py must specify PARSER_MODEL='claude-haiku-4-5-20251001'; "
-            "string not found in source"
-        )
+    def test_extract_json_tolerates_preamble(self, el):
+        raw = "Here is the result:\n{\"verdict\": \"PASS\"}"
+        result = el._extract_json(raw)
+        assert result == {"verdict": "PASS"}, f"_extract_json must find JSON past preamble; got {result}"
 
-    # AC 9c: Parser uses transcript-parser.md agent file, not parse_transcript.py import
-    def test_parser_uses_agent_file_not_script_import(self, source):
-        assert "transcript-parser.md" in source, (
-            "eval_loop.py must reference transcript-parser.md as the parser agent file"
-        )
+    def test_extract_json_returns_error_on_no_json(self, el):
+        result = el._extract_json("no json here at all")
+        assert "error" in result, "_extract_json must return error dict when no JSON found"
+
+    # AC 9c: No parse_transcript.py import
+    def test_no_parse_transcript_import(self, source):
         assert "from parse_transcript import" not in source, (
-            "eval_loop.py must NOT import from parse_transcript — use _call_parser() instead"
+            "eval_loop.py must NOT import from parse_transcript"
         )
 
 

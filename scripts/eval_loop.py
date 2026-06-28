@@ -107,15 +107,16 @@ def _call_parser(case_path: str) -> dict:
 
 # ── evaluator helpers ──────────────────────────────────────────────────────
 
-def _call_evaluator(parse_output: dict, case_path: str) -> dict:
+def _call_evaluator(parse_output_path: str, case_path: str) -> dict:
     """
     Call parser-evaluator agent via the claude CLI.
+    Passes file paths so the agent uses its Read tool — avoids large CLI args.
     Returns the parsed JSON dict or {"error": "..."}.
     """
     user_msg = (
-        "Evaluate this parser output.\n\n"
-        f"Original case file path: {case_path}\n\n"
-        f"Parser output:\n{json.dumps(parse_output, indent=2)}"
+        f"Evaluate the parser output.\n\n"
+        f"Parse output file: {parse_output_path}\n"
+        f"Original case file: {case_path}"
     )
     result = subprocess.run(
         [
@@ -297,8 +298,9 @@ def main():
             )
             continue
 
-        # (d) parser-evaluator agent (claude CLI)
-        eval_result = _call_evaluator(parse_result, case_path)
+        # (d) parser-evaluator agent — pass file paths, agent uses Read tool
+        parse_output_path = str(case_dir / "parse_output.json")
+        eval_result = _call_evaluator(parse_output_path, case_path)
         (case_dir / "eval_output.json").write_text(json.dumps(eval_result, indent=2))
 
         if "error" in eval_result:

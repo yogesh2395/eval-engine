@@ -316,10 +316,21 @@
 
 ---
 
-### [D-031] Parser latency: haiku agent (~2.5min) acceptable for MVP; direct API (<10s) deferred to when credits available
+### [D-031] Claude CLI subprocess is the canonical agent-call path — direct Anthropic API deprecated for eval pipeline
 - **Category:** Architecture
-- **Status:** Active
-- **Implemented in:** transcript-parser.md (model: haiku), parse_transcript.py (direct API path, staged)
-- **Decision:** For MVP, the haiku agent (using claude.ai Pro OAuth) is the parser. The direct Anthropic API path (parse_transcript.py) is built and ready but requires API credits on a separate account. Switch to API path when credits are funded.
-- **Rationale:** Agent startup overhead is 10–15s regardless of model; haiku inference adds ~8s; total ~2.5min per document. This is acceptable for batch evaluation. The API path targets <10s but requires a funded API key separate from the claude.ai subscription OAuth.
-- **Implications:** Any live-action use case requiring <30s parse time must use the direct API path. Do not use the haiku agent in a real-time pipeline until latency is resolved.
+- **Status:** Locked
+- **Supersedes:** Earlier assumption that `parse_transcript.py` (direct `anthropic.Anthropic()` API) was the parser path
+- **Implemented in:** scripts/eval_loop.py (`_call_parser`, `_call_evaluator` use `subprocess.run(["claude", "-p", ..., "--agent", ...])`); .claudeignore (scripts/parse_transcript.py and scripts/run_parser.sh excluded from Claude context)
+- **Decision:** All agent invocations in the eval pipeline use `claude -p --agent <name> --output-format text --dangerously-skip-permissions --no-session-persistence` via subprocess. The direct `anthropic.Anthropic(api_key=...)` path (parse_transcript.py) is deprecated. No ANTHROPIC_API_KEY is needed or read.
+- **Rationale:** `claude -p --agent` routes through Claude Pro OAuth (macOS Keychain token managed by the claude CLI). The direct API requires pay-as-you-go credits on a separate billing account. Since the eval engine runs on a Pro subscription, the CLI path costs nothing incremental and eliminates a credential class entirely.
+- **Implications:** `parse_transcript.py` and `run_parser.sh` are in `.claudeignore` — they are not the active path. Do not reintroduce `anthropic.Anthropic()` calls in the eval pipeline. Latency is ~2.5min per document due to claude CLI startup overhead; this is acceptable for batch runs but not real-time use.
+
+---
+
+### [D-032] Evaluator receives file paths — agents read their own inputs via Read tool
+- **Category:** Architecture
+- **Status:** Locked
+- **Implemented in:** scripts/eval_loop.py (`_call_evaluator(parse_output_path, case_path)`)
+- **Decision:** The parser-evaluator agent is passed two file paths (parse_output_path, case_path) and uses its Read tool to load them. The eval_loop never embeds parse output as inline JSON in the claude CLI `-p` argument.
+- **Rationale:** Embedding the full parse JSON (including `full_transcript`, which can be 20K+ chars) as a CLI argument causes a silent agent failure — the subprocess returns exit code 1 with empty stderr because macOS ARG_MAX is exceeded. File paths are stable, short, and let the agent control its own I/O.
+- **Implications:** Any agent that receives large data must get it via file path, not inline `-p` injection. This is the correct pattern for all future agent integrations: write artifact to disk, pass path, agent reads it.

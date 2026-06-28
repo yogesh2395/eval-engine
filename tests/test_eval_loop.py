@@ -351,11 +351,27 @@ class TestEvalLoop:
             f"_worst_dimension must return None when all rates are None; got {result!r}"
         )
 
-    # AC 9: Model in _call_evaluator is claude-sonnet-4-6 (verified from source text)
+    # AC 9a: Evaluator model is claude-sonnet-4-6
     def test_call_evaluator_uses_claude_sonnet_4_6_model(self, source):
         assert "claude-sonnet-4-6" in source, (
             "eval_loop.py must specify model 'claude-sonnet-4-6' in _call_evaluator; "
             "string not found in source"
+        )
+
+    # AC 9b: Parser model is claude-haiku-4-5-20251001 (via PARSER_MODEL constant)
+    def test_call_parser_uses_haiku_model(self, source):
+        assert "claude-haiku-4-5-20251001" in source, (
+            "eval_loop.py must specify PARSER_MODEL='claude-haiku-4-5-20251001'; "
+            "string not found in source"
+        )
+
+    # AC 9c: Parser uses transcript-parser.md agent file, not parse_transcript.py import
+    def test_parser_uses_agent_file_not_script_import(self, source):
+        assert "transcript-parser.md" in source, (
+            "eval_loop.py must reference transcript-parser.md as the parser agent file"
+        )
+        assert "from parse_transcript import" not in source, (
+            "eval_loop.py must NOT import from parse_transcript — use _call_parser() instead"
         )
 
 

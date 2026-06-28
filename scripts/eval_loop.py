@@ -31,16 +31,15 @@ from datetime import datetime
 REPO_ROOT   = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 TESTING_DIR = REPO_ROOT / "examples" / "testing_set"
-AGENT_FILE  = REPO_ROOT / ".claude" / "agents" / "parser-evaluator.md"
+AGENT_FILE         = REPO_ROOT / ".claude" / "agents" / "parser-evaluator.md"
+PARSER_AGENT_FILE  = REPO_ROOT / ".claude" / "agents" / "transcript-parser.md"
+PARSER_MODEL       = "claude-haiku-4-5-20251001"
 LOGS_DIR    = REPO_ROOT / "logs" / "runs"
 
 # ── extend sys.path (same pattern as parse_transcript.py) ─────────────────
 _pip_deps = str(REPO_ROOT / ".pip_deps")
 if _pip_deps not in sys.path:
     sys.path.insert(0, _pip_deps)
-
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
 
 
 # ── evaluator helpers ──────────────────────────────────────────────────────
@@ -97,6 +96,82 @@ def _call_evaluator(parse_output: dict, case_path: str, api_key: str) -> dict:
         return json.loads(raw)
     except json.JSONDecodeError as exc:
         return {"error": f"JSON parse failed: {exc}", "raw": raw[:500]}
+
+
+# ── parser helpers ────────────────────────────────────────────────────────
+
+def _load_parser_prompt() -> str:
+    """Read transcript-parser.md; strip YAML frontmatter (between first two ---)."""
+    with open(PARSER_AGENT_FILE, "r", encoding="utf-8") as f:
+        lines = f.read().splitlines()
+
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                lines = lines[i + 1:]
+                break
+
+    return "\n".join(lines).strip()
+
+
+def _call_parser(case_path: str, api_key: str) -> dict:
+    """
+    Call transcript-parser agent via Anthropic API (haiku).
+    Reads case file, uses transcript-parser.md as system prompt.
+    Returns the parsed JSON dict or {"error": "..."}.
+    """
+    try:
+        with open(case_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception as exc:
+        return {"error": f"File read failed: {exc}", "path": case_path}
+
+    try:
+        import anthropic
+    except ImportError:
+        return {"error": "anthropic package not found in .pip_deps"}
+
+    t0 = time.time()
+    system_prompt = _load_parser_prompt()
+    client = anthropic.Anthropic(api_key=api_key)
+
+    try:
+        response = client.messages.create(
+            model=PARSER_MODEL,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[{
+                "role": "user",
+                "content": f"Parse this case interview file.\n\nFile: {case_path}\n\n{content}",
+            }],
+        )
+    except Exception as exc:
+        return {"error": f"API call failed: {exc}"}
+
+    latency_ms = int((time.time() - t0) * 1000)
+    raw = response.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+        raw = raw.rsplit("```", 1)[0].strip()
+
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return {"error": f"JSON parse failed: {exc}", "raw": raw[:500], "latency_ms": latency_ms}
+
+    result["_parser_meta"] = {
+        "latency_ms": latency_ms,
+        "model": PARSER_MODEL,
+        "agent_file": str(PARSER_AGENT_FILE),
+        "input_tokens": response.usage.input_tokens,
+        "output_tokens": response.usage.output_tokens,
+        "file": case_path,
+    }
+    print(
+        f"[parser] {latency_ms}ms | in={response.usage.input_tokens} out={response.usage.output_tokens}",
+        file=sys.stderr,
+    )
+    return result
 
 
 # ── subprocess wrappers ────────────────────────────────────────────────────
@@ -254,12 +329,8 @@ def main():
             # Write an empty stub so downstream artifacts aren't missing
             Path(preprocessed_path).write_text("", encoding="utf-8")
 
-        # (c) parse_transcript — direct import, same process
-        try:
-            from parse_transcript import parse as _parse
-            parse_result = _parse(case_path)
-        except Exception as exc:
-            parse_result = {"error": f"parse_transcript import/call failed: {exc}"}
+        # (c) parse via transcript-parser.md agent (haiku)
+        parse_result = _call_parser(case_path, api_key)
 
         (case_dir / "parse_output.json").write_text(json.dumps(parse_result, indent=2))
 

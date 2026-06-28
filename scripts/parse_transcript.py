@@ -28,8 +28,10 @@ Return ONLY this JSON object — no preamble, no markdown wrapper, nothing else:
   "case_category": "Profitability|Market Entry|Pricing|Operations|M&A|Unconventional|Public Policy|Unknown",
   "difficulty": "Easy|Moderate|Challenging|Unknown",
   "sector": "string",
+  "input_format": "transcript",
   "problem_statement": "string",
   "initial_framing": "string",
+  "reasoning_trace": "string",
   "final_recommendation": "string",
   "full_transcript": "string",
   "approach_framework_present": true or false,
@@ -45,33 +47,50 @@ Start at "Your client is..." / "You have been hired..." / "A company is facing..
 End before the candidate's first question. If transcript starts mid-dialogue, write \
 "[Problem statement not found at transcript start — see full_transcript]" and note it.
 
-initial_framing: Candidate's FIRST 3-5 turns only, concatenated verbatim.
-Include: clarifying questions, initial hypothesis, first structural breakdown.
+initial_framing: Candidate's FIRST 3-5 turns, concatenated verbatim.
+Include: clarifying questions, initial scope declarations, first structural hypothesis.
 Exclude: interviewer responses in this window.
-Stop when candidate moves from clarifying to requesting numbers or diving into sub-branches.
+Boundary end: when candidate says "May I take a minute to structure my thoughts" or \
+"Let me begin my analysis" or explicitly pivots from clarifying to analyzing. \
+If fewer than 3 candidate turns before pivot, include all and note it.
+
+reasoning_trace: ALL candidate turns between initial_framing and final_recommendation, verbatim.
+This is the analytical middle: hypothesis formation, framework application, data interpretation, \
+sub-problem decomposition, intermediate conclusions, self-corrections, belief updates when new data arrives.
+Boundary start: first candidate turn after initial_framing ends (first hypothesis or framework statement).
+Boundary end: turn immediately before closing recommendation block.
+Exclude: interviewer turns in this window (data provides, confirmations, prompts).
+If transcript has no distinct middle (≤2 analytical turns), include them and note \
+"Compressed transcript — reasoning_trace and final_recommendation may overlap".
+Do NOT include approach_framework_text content here.
 
 final_recommendation: Candidate's LAST 2-4 turns, verbatim.
-Include: root cause synthesis, recommendations, prioritisation.
-Exclude: interviewer closing remarks.
-If recommendations scattered (no distinct closing block), extract last 400 words of candidate speech and note it.
-Do NOT pull from approach_framework_text — only candidate dialogue.
+Include: root cause synthesis, recommendations, prioritisation, implementation notes.
+Exclude: interviewer closing remarks and approach_framework_text.
+Boundary: after "My recommendation is..." / "I have two sets of recommendations..." / "In conclusion..." or equivalent.
+If no distinct closing block, extract last 400 words of candidate speech and note it.
 
 full_transcript: Complete transcript text, lightly cleaned.
-Remove page headers (IIM Ahmedabad, 2024-2025, Page N, Consult Club, Click here for...).
+Remove page headers (IIM Ahmedabad, 2024-2025, Page N, Consult Club, Click here for..., Buddy Case).
 Normalize spacing. Preserve interleaved dialogue exactly as-is.
 
 approach_framework_present / approach_framework_text: If file contains "Approach / Framework" \
-or "Approach/ Framework" section after transcript, set true and include verbatim. Keep OUT of final_recommendation.
+section after transcript, set true and include verbatim. Keep OUT of reasoning_trace and final_recommendation.
 
-turn_count: Count distinct speaker turns (continuous block from one party before other responds).
+turn_count: Count distinct speaker turns across full transcript.
 
 Speaker attribution (when not labelled): Interviewer = provides data, confirms/denies, prompts. \
-Candidate = asks questions, builds frameworks, delivers recommendations.
+Candidate = asks questions, builds frameworks, interprets data, delivers recommendations.
 
-extraction_notes: Document EVERY uncertainty. Examples:
+extraction_notes: Document EVERY uncertainty including:
 "Speaker attribution inferred — no I:/C: labels"
-"Initial framing only 2 candidate turns — transcript may be abbreviated"
-"Final recommendation not a distinct closing block — extracted last 400 words"
+"reasoning_trace boundary approximate — no explicit pivot signal found"
+"Compressed transcript — reasoning_trace and final_recommendation may overlap"
+"Initial framing only N candidate turns before pivot"
+
+FIELD COVERAGE CHECK before outputting: verify problem_statement, initial_framing, reasoning_trace, \
+and final_recommendation are all non-empty. Verify reasoning_trace does not duplicate content \
+already in initial_framing or final_recommendation. If any check fails, note it in extraction_notes.
 
 CONSTRAINTS:
 - Return ONLY the JSON. No explanation before or after.

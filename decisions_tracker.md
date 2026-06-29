@@ -334,3 +334,35 @@
 - **Decision:** The parser-evaluator agent is passed two file paths (parse_output_path, case_path) and uses its Read tool to load them. The eval_loop never embeds parse output as inline JSON in the claude CLI `-p` argument.
 - **Rationale:** Embedding the full parse JSON (including `full_transcript`, which can be 20K+ chars) as a CLI argument causes a silent agent failure — the subprocess returns exit code 1 with empty stderr because macOS ARG_MAX is exceeded. File paths are stable, short, and let the agent control its own I/O.
 - **Implications:** Any agent that receives large data must get it via file path, not inline `-p` injection. This is the correct pattern for all future agent integrations: write artifact to disk, pass path, agent reads it.
+
+---
+
+## DevOps / Tooling Decisions
+
+### [D-034] Pre-merge gate: pytest + security sweep + open-D-entry check
+- **Category:** DevOps
+- **Status:** Locked
+- **Implemented in:** scripts/pre_merge_gate.sh
+- **Decision:** All merges to `main` must pass a three-check gate: (1) `pytest tests/` — zero test failures; (2) security sweep — no credentials, API keys, or `.env` files in changed files; (3) open D-entry scan — warn on any `# TODO: D-xxx` markers or non-Locked entries in `decisions_tracker.md` (non-blocking, logs warning).
+- **Rationale:** The gate encodes the project's minimum bar mechanically so it cannot be skipped by oversight. The security sweep prevents D-030 credential-class bugs from reaching the repo. The D-entry warning surfaces unresolved architectural debt at merge time rather than at runtime.
+- **Implications:** Run `./scripts/pre_merge_gate.sh` before every push to main. The script exits 0 (PASS) or 1 (FAIL). D-entry warnings are non-blocking. GitHub branch protection on private repos requires a paid plan (Pro/Team) — confirmed unavailable on this account. The gate script is the sole enforcement mechanism; this is acceptable for a single-contributor repo.
+
+---
+
+### [D-035] Security-sweep agent: read-only credential scanner for staged diffs
+- **Category:** DevOps
+- **Status:** Locked
+- **Implemented in:** .claude/agents/specialist/security-sweep.md
+- **Decision:** A dedicated `security-sweep` Claude agent scans staged diffs or named files for credential leaks (raw API keys, hardcoded passwords/tokens, tracked `.env` files). It returns a structured JSON verdict (PASS or BLOCK) with specific finding at file:line. It has NO write access.
+- **Rationale:** A grep-only sweep (used in pre_merge_gate.sh) is fast and deterministic for known patterns. The Claude agent layer adds semantic understanding for edge cases (e.g., distinguishing a real token from a test fixture), produces structured machine-readable output, and can be invoked ad-hoc during development. Both layers are complementary.
+- **Implications:** The agent is wired into pre_merge_gate.sh as the backing scanner. Agent output schema uses `verdict: PASS|BLOCK` and a `findings` array with `file`, `line`, `pattern`, `snippet`, `severity`. A false PASS (missed credential) is the worst outcome — the agent is biased toward BLOCK on ambiguous cases.
+
+---
+
+### [D-036] Agents directory split: generalist / specialist / dev tiers
+- **Category:** DevOps
+- **Status:** Locked
+- **Implemented in:** .claude/agents/generalist/, .claude/agents/specialist/, .claude/agents/dev/
+- **Decision:** Agent files under `.claude/agents/` are organized into three subdirectories: `generalist/` (pre-qualifier, post-scorer, process-monitor, researcher, validator, committer), `specialist/` (transcript-parser, parser-evaluator, parser-fixer, security-sweep), `dev/` (coder, test-writer). Agent discovery remains by `name:` frontmatter field — the claude harness scans subdirectories recursively.
+- **Rationale:** A flat agents directory has no structural signal for how dangerous or how specialized each agent is. The tier split makes the role of each agent legible at a glance: generalist agents execute safe, bounded judgment; specialist agents have narrow, high-stakes extraction or scanning duties; dev agents scaffold implementation work and are not production paths.
+- **Implications:** New agents must be placed in the correct tier before their first PR. The `--agent <name>` CLI invocation is unaffected — it matches on the `name:` field, not the file path. If the harness is updated to scope agent access by tier (e.g., restricting specialist agents to specific callers), the subdirectory structure makes that policy trivially enforceable.

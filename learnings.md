@@ -23,15 +23,28 @@ but may not have completed — check for `summary.json` before reading.
 
 ### What the data showed
 
-**From the first two runs (1 completed case each — evaluator was broken for the other 6):**
+**Reruns with fixed evaluator — 11 cases evaluated, 3 errored at parser:**
 
-| Dimension | Pass rate |
-|---|---|
-| field_completeness | 1.0 (100%) |
-| boundary_accuracy | 1.0 (100%) |
-| speaker_attribution | 1.0 (100%) |
-| information_loss | 0.0 (0%) |
-| verbatim_constraint | 0.0–1.0 (mixed) |
+| Dimension | Run A seed=42 (6/7) | Run B seed=99 (5/7) | Signal |
+|---|---|---|---|
+| field_completeness | 100% | 100% | Solid |
+| speaker_attribution | 100% | 80% | Mostly solid |
+| verbatim_constraint | 100% | 100% | Solid |
+| boundary_accuracy | 50% | 80% | Needs attention |
+| **information_loss** | **0%** | **20%** | **Primary failure** |
+
+**Failure counts across both runs (combined):**
+
+| Error type | Count | Priority |
+|---|---|---|
+| INFO_LOSS | 17 | Fix first |
+| BOUNDARY_ERROR | 4 | Fix second |
+| SPEAKER_MISMATCH | 1 | Monitor |
+| FIELD_MISSING | 1 | Monitor |
+
+**Failure summaries on disk:**
+- `logs/failures/failure_summary_20260628_220906.json` (seed=42)
+- `logs/failures/failure_summary_20260628_220908.json` (seed=99)
 
 **Consistent failure: `information_loss`**
 - The parser strips interviewer data-reveal answers (quantitative targets revealed

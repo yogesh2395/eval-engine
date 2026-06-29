@@ -128,7 +128,33 @@ Parser-fixer ran for the first time on combined failure summaries (seed=42 + see
 Parser-evaluator updated: checks `confirmed_case_facts` in information_loss spot-check and
 field_completeness. Tests: 225/225 pass.
 
-Re-run with seed=42, `--max-cases 3` pending. Baseline information_loss pass rate = 0.0.
+Re-run baseline (run 20260629_170243): information_loss = 0.5 (1/2 cases). c35 errored.
+
+### 3. Parser-fixer loop — iteration 2 complete (2026-06-30) — **STOP-RULE MET**
+
+Failure source: `logs/failures/failure_summary_20260629_170243.json` (c69 INFO_LOSS focus).
+3 patches applied to `.claude/agents/transcript-parser.md`:
+- `confirmed_case_facts` include: add stated client objective/strategic goal (covers "maximize economic worth" miss)
+- `confirmed_case_facts` exclude clarification: short datum (e.g., "5 years") is NOT a bare confirmation
+- Speaker attribution tiebreaker: 1–4 word response after candidate question → attribute to interviewer
+
+Re-run (run 20260630_003738) — same manifest (c03, c35, c69):
+
+| Dimension | Baseline (0629_170243) | Iteration 2 (0630_003738) | Delta |
+|---|---|---|---|
+| information_loss | 0.50 (1/2) | **1.00** (3/3) | +50pp |
+| speaker_attribution | 0.50 (1/2) | **1.00** (3/3) | +50pp |
+| boundary_accuracy | 1.00 (2/2) | 0.67 (2/3) | -33pp (c35 FLAG) |
+| field_completeness | 1.00 | 1.00 | 0 |
+| verbatim_constraint | 1.00 | 1.00 | 0 |
+
+Stop-rule check: information_loss = 1.0 ≥ 0.8 ✓ | hard errors (FAIL) = 0 ✓ → **LOOP CLOSED**
+
+Remaining open signals (not blocking, queue for future iteration if loop re-opens):
+- c35 BOUNDARY_ERROR: interviewer question leaks into `final_recommendation` when no explicit closing signal found
+- c69 INFO_LOSS (FLAG, 6.7%): reordered/duplicated block at top of source file; unique exchange not in `full_transcript`
+- c35 INFO_LOSS (FLAG, 6.7%): trailing "Financial Feasibility Recommendations" block (PDF artifact) not captured
+Failure summary: `logs/failures/failure_summary_20260630_003738.json`
 
 ### 3. Worktree cleanup — CLOSED (2026-06-29)
 All 4 stale worktrees removed (agent-a4feadb7ef73b89db, agent-a2aaff5c30a948f4b,
@@ -195,18 +221,17 @@ Tests: 227/227 passing.
 
 ## What to Tell the Next Session
 
-1. **Main pipeline is end-to-end verified.** transcript-parser → pre-qualifier →
-   post-scorer ran on c03. Persistent outputs in `logs/runs/20260629_170243/c03/`.
+1. **Parser RL loop is CLOSED.** information_loss = 1.0, 0 hard errors across 3 cases
+   (run 20260630_003738). Iteration 2 patches live in `.claude/agents/transcript-parser.md`.
 
 2. **Two loops — do not conflate:**
    - Main eval loop: `detect_format → [A] transcript-parser → pre-qualifier → post-scorer`
    - Dev/parser loop: `eval_loop.py → transcript-parser → parser-evaluator → aggregate_failures → parser-fixer`
    Current `eval_loop.py` is the **dev loop only**.
 
-3. **Parser RL loop iteration 2:** feed `logs/failures/failure_summary_20260629_170243.json`
-   to parser-fixer (focus: c69 INFO_LOSS). Re-run `--manifest logs/runs/20260629_170243/manifest.json`
-   for apples-to-apples delta. Stop-rule: information_loss >= 0.8 with 0 hard errors.
+3. **Next priority: Priority 2 — Branching + merge gate** (see TODO.md).
+   Enable branch protection, write pre-merge gate script, document in decisions_tracker.md.
 
-4. **TODO.md is the task queue.** Priorities 2-5 start after RL loop reaches stop-rule.
+4. **TODO.md is the task queue.** RL loop section now complete; Priorities 2–5 are live.
 
-5. `decisions_tracker.md` is authoritative. D-033 now fully implemented.
+5. `decisions_tracker.md` is authoritative. D-033 fully implemented.

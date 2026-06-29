@@ -363,6 +363,17 @@
 - **Category:** DevOps
 - **Status:** Locked
 - **Implemented in:** .claude/agents/generalist/, .claude/agents/specialist/, .claude/agents/dev/
-- **Decision:** Agent files under `.claude/agents/` are organized into three subdirectories: `generalist/` (pre-qualifier, post-scorer, process-monitor, researcher, validator, committer), `specialist/` (transcript-parser, parser-evaluator, parser-fixer), `dev/` (coder, test-writer, security-sweep). Agent discovery remains by `name:` frontmatter field — the claude harness scans subdirectories recursively.
-- **Rationale:** A flat agents directory has no structural signal for how dangerous or how specialized each agent is. The tier split makes the role of each agent legible at a glance: generalist agents execute safe, bounded judgment; specialist agents have narrow, domain-specific extraction duties tied to the transcript pipeline; dev agents are development-workflow tools (gating, scaffolding, implementation) and are not production eval paths.
+- **Decision:** Agent files under `.claude/agents/` are organized into three subdirectories: `generalist/` (researcher, validator, committer, process-monitor), `specialist/` (transcript-parser, parser-evaluator, parser-fixer, pre-qualifier, post-scorer), `dev/` (coder, test-writer, security-sweep). Agent discovery remains by `name:` frontmatter field — the claude harness scans subdirectories recursively.
+- **Rationale:** Tier semantics: generalist = general-purpose agents reusable outside this project; specialist = domain-specific to this eval engine's pipeline (scoring rubric, pre-qual gate, transcript extraction); dev = development-workflow tools not on the production eval path. pre-qualifier and post-scorer are specialist, not generalist — they encode this engine's rubric and gate logic and have no meaning outside it.
+- **Supersedes:** Initial (incorrect) placement of pre-qualifier and post-scorer in generalist/.
 - **Implications:** New agents must be placed in the correct tier before their first PR. The `--agent <name>` CLI invocation is unaffected — it matches on the `name:` field, not the file path. If the harness is updated to scope agent access by tier (e.g., restricting specialist agents to specific callers), the subdirectory structure makes that policy trivially enforceable.
+
+---
+
+### [D-037] Validator bypass fix: pre-commit hook + committer sentinel
+- **Category:** DevOps
+- **Status:** Locked
+- **Implemented in:** scripts/hooks/pre-commit, scripts/install_hooks.sh, .claude/agents/generalist/committer.md, CLAUDE.md (Hard rules)
+- **Decision:** The validator loop (CLAUDE.md) had no mechanical enforcement — any session could `git commit` directly, bypassing the validator entirely. Fixed by: (1) `scripts/hooks/pre-commit` blocks commits on logic files (.py, .sh, agent .md) unless `logs/validator_pass.flag` exists; (2) the committer agent now requires the orchestrator to paste the validator's PASS verdict before writing the flag; (3) the flag is consumed (deleted) on each commit so it cannot carry over; (4) CLAUDE.md Hard rules explicitly name background sessions as non-exempt.
+- **Rationale:** Documentation does not stop a background session from committing directly. Only a mechanism in the commit path itself is reliable. The pre-commit hook fires unconditionally on every `git commit`, regardless of which agent or session invoked it. --no-verify is already banned (D-026 / CLAUDE.md), so the hook cannot be legitimately bypassed.
+- **Implications:** Run `./scripts/install_hooks.sh` once after cloning or after pulling this change. The hook is not checked into `.git/hooks/` (git does not track hooks), so install_hooks.sh must be run manually. For logic-file commits: invoke validator → get PASS → committer writes flag → commit proceeds. For docs/config-only commits: hook self-skips, no sign-off needed.

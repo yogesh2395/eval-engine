@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# pre-commit hook — enforce validator sign-off on logic-file commits
+#
+# Logic files: .py, .sh, and agent .md files under .claude/agents/
+# Any commit touching these requires logs/validator_pass.flag to exist.
+#
+# The committer agent writes this flag after the orchestrator explicitly
+# approves the validator's PASS verdict. The flag is consumed (deleted)
+# on each successful commit so it cannot carry over to the next one.
+#
+# Install: ./scripts/install_hooks.sh
+# Bypass: --no-verify is banned (CLAUDE.md). For docs-only commits the
+#         hook self-skips — no bypass needed.
+
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+FLAG="$REPO_ROOT/logs/validator_pass.flag"
+
+# Detect logic files in staged diff
+LOGIC_CHANGED=$(git diff --cached --name-only \
+    | grep -E '\.(py|sh)$|\.claude/agents/.+\.md$' \
+    || true)
+
+if [[ -z "$LOGIC_CHANGED" ]]; then
+    exit 0  # docs/config-only change — no validator required
+fi
+
+if [[ ! -f "$FLAG" ]]; then
+    echo ""
+    echo "┌─────────────────────────────────────────────────────────────┐"
+    echo "│  COMMIT BLOCKED — validator sign-off required               │"
+    echo "│                                                             │"
+    echo "│  Logic files are staged:                                   │"
+    for f in $LOGIC_CHANGED; do
+        printf  "│    %-58s│\n" "$f"
+    done
+    echo "│                                                             │"
+    echo "│  Steps:                                                     │"
+    echo "│    1. Run the validator agent on your acceptance criteria   │"
+    echo "│    2. If verdict is PASS, create the sign-off flag:        │"
+    echo "│         touch logs/validator_pass.flag                     │"
+    echo "│    3. Re-run git commit                                     │"
+    echo "│                                                             │"
+    echo "│  (--no-verify is banned per CLAUDE.md / D-026)             │"
+    echo "└─────────────────────────────────────────────────────────────┘"
+    echo ""
+    exit 1
+fi
+
+# Consume the flag — one PASS, one commit
+rm -f "$FLAG"
+echo "  validator sign-off confirmed — proceeding with commit"
+exit 0

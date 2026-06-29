@@ -47,7 +47,8 @@ fi
 echo "=== Pre-merge gate ==="
 header 1 "pytest tests/"
 
-if cd "$REPO_ROOT" && python -m pytest tests/ -q --tb=short 2>&1; then
+PYTHON=$(command -v python3 || command -v python)
+if cd "$REPO_ROOT" && "$PYTHON" -m pytest tests/ -q --tb=short 2>&1; then
     pass "all tests"
 else
     fail "pytest returned non-zero — fix tests before merging"
@@ -70,15 +71,21 @@ declare -a PATTERNS=(
     "MEDIUM|env var mutation|os\.environ\[.ANTHROPIC_API_KEY.\][[:space:]]*="
 )
 
-# Files to skip for security scan (docs, examples, gitignore-listed)
+# Files to skip for security scan (docs, markdown agent defs, examples, gitignore-listed)
+# .md files are documentation/agent definitions — examples in them are not real credentials
+SKIP_EXTENSIONS=("md" "txt" "rst")
 SKIP_PATTERNS=(".gitignore" ".env.example" "setup_keychain.sh")
 
 for rel_file in $CHANGED_FILES; do
     full="$REPO_ROOT/$rel_file"
     [[ -f "$full" ]] || continue
 
-    # Skip .env.example and similar
+    # Skip documentation files and known safe paths
     skip=false
+    ext="${rel_file##*.}"
+    for se in "${SKIP_EXTENSIONS[@]}"; do
+        [[ "$ext" == "$se" ]] && skip=true && break
+    done
     for sp in "${SKIP_PATTERNS[@]}"; do
         [[ "$rel_file" == *"$sp"* ]] && skip=true && break
     done

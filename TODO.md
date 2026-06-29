@@ -16,22 +16,21 @@
 
 ---
 
-## NEXT SESSION — Parser RL loop iteration 2
+## Parser RL loop iteration 2 — CLOSED ✓ (2026-06-30)
 
-- [ ] Run `aggregate_failures.py` on `logs/runs/20260629_170243/`  ← already done, file exists
-- [ ] Feed `failure_summary_20260629_170243.json` to parser-fixer
+- [x] Run `aggregate_failures.py` on `logs/runs/20260629_170243/`
+- [x] Feed `failure_summary_20260629_170243.json` to parser-fixer
       Focus: c69 INFO_LOSS (objective clarification miss: "maximize economic worth")
-- [ ] Apply fixer patch to `transcript-parser.md`
-- [ ] Re-run with SAME manifest (`--manifest logs/runs/20260629_170243/manifest.json`)
-      for apples-to-apples delta vs. this run's baseline
-- [ ] Compute delta: need ≥10% improvement (low baseline) to close iteration 2
-- [ ] Stop-rule: information_loss ≥ 0.8 with 0 hard errors → loop done
+- [x] Apply fixer patch to `transcript-parser.md` (3 patches)
+- [x] Re-run with SAME manifest → `logs/runs/20260630_003738/` — 3/3 completed, 0 errors
+- [x] Delta: information_loss 0.50 → 1.00 (+50pp), speaker_attribution 0.50 → 1.00 (+50pp)
+- [x] Stop-rule: information_loss = 1.0 ≥ 0.8 ✓ | hard FAIL = 0 ✓ → **LOOP CLOSED**
 
 ---
 
-## AFTER RL LOOP REACHES STOP-RULE
+## NOW — Priority 2: Branching + merge gate
 
-### Priority 2 — Branching + merge gate
+### Priority 2 — Branching + merge gate  ← START HERE
 - [ ] Enable branch protection on `main` (no direct push, require PR)
 - [ ] Write pre-merge gate script: runs `pytest tests/` + security sweep + flags open D-entries
 - [ ] Document gate in `decisions_tracker.md`

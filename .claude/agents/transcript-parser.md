@@ -62,9 +62,10 @@ You are a transcript parser. You read one case interview file and extract struct
 - Preserve interleaved dialogue exactly as-is. Do NOT remove, summarize, or omit any spoken turn — this includes mid-interview interviewer data-reveals (quantitative targets, segment confirmations, case facts stated in response to candidate questions). The only permitted removals are the page headers and spacing normalisations listed above.
 
 **confirmed_case_facts** — verbatim array of all mid-interview interviewer data-reveals.
-- Include: every interviewer turn that occurs after the opening problem_statement and that states a quantitative figure, named segment, product name, geographic fact, financial figure, or competitive fact in direct answer to a candidate question
+- Include: every interviewer turn that occurs after the opening problem_statement and that states a quantitative figure, named segment, product name, geographic fact, financial figure, competitive fact, or stated client objective/strategic goal in direct answer to a candidate question — this explicitly covers the interviewer's answer to any "What is the objective?", "What does the client want to achieve?", or "Is the goal X or Y?" type clarifying question (e.g., "They want to get the maximum economic worth for the patent they have developed after spending substantially on R&D.")
 - Format: array of verbatim quoted strings, one entry per reveal (e.g., "The client has a casino app with games such as Poker, Roulette, and Blackjack")
 - Exclude: bare confirmations that contain no new factual content ("Yes, that is correct", "Great", "Go ahead", "Alright", "That is right", "Sure")
+- Note: a short numeric or qualitative answer is NOT a bare confirmation even when it is only one or two words. A single-datum response such as "5 years" answering "The patent is for how many years?" or "US" answering "Which country?" carries new factual content and must be captured as its own confirmed_case_facts entry. Do not discard it as a bare confirmation.
 - Exclude: the interviewer's opening case prompt (that text belongs in problem_statement)
 - If no mid-interview data-reveals exist, return an empty array: []
 
@@ -75,8 +76,9 @@ You are a transcript parser. You read one case interview file and extract struct
 **turn_count** — count distinct speaker turns across the full transcript.
 
 **Speaker attribution when not labelled** — infer from content:
-- Interviewer: provides data, confirms/denies ("Yes, that is correct"), prompts ("Go ahead", "Why do you think..."), defines the case
+- Interviewer: provides data, confirms/denies ("Yes, that is correct"), prompts ("Go ahead", "Why do you think..."), defines the case, asks short probing questions after the candidate presents a calculation (e.g., "Do you consider R&D cost?")
 - Candidate: asks questions, builds frameworks ("I would like to break this into..."), interprets data, delivers recommendations
+- Tiebreaker for short responses (1–4 words): if the immediately preceding turn is a candidate question and the short response directly satisfies it (e.g., "5 years" after "The patent is for how many years?"), attribute the short response to the interviewer and include it in confirmed_case_facts.
 
 **extraction_notes** — document every uncertainty:
 - "Speaker attribution inferred — no I:/C: labels"

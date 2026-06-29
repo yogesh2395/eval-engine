@@ -18,6 +18,7 @@ Keystone principle: build the scorer before any routing logic.
 4. test-writer writes tests per criteria
 5. validator runs tests, scores PASS/FAIL with reasons
 6. FAIL → back to coder with findings. PASS → you review diff and commit.
+7. **After commit:** update TODO.md (mark done, add any corrections) and learnings.md (findings, errors, validator verdict, session commit log). This step is mandatory — not optional cleanup.
 
 ## Hard rules
 - No orchestration platform build. No model-router build.

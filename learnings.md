@@ -193,6 +193,65 @@ Tests: 227/227 passing.
 
 ---
 
+## Session: Priority 2-4 + Process Enforcement (2026-06-30)
+
+### What we built
+Priority 2-4 from TODO.md: pre-merge gate, security-sweep agent, agents directory split.
+Three post-commit corrections surfaced by orchestrator review.
+
+### Agent tier classification — final canonical definition
+Established by error-and-correction during this session. The correct criterion:
+
+| Tier | Criterion | Agents |
+|---|---|---|
+| `specialist/` | Domain-specific to *this* eval engine — encodes rubric, gate, or extraction pipeline | pre-qualifier, post-scorer, transcript-parser, parser-evaluator, parser-fixer |
+| `generalist/` | General-purpose — reusable in any software project | researcher, validator, committer, process-monitor |
+| `dev/` | Dev-workflow tools — gate, scaffold, implement; not on production eval path | coder, test-writer, security-sweep |
+
+**Error made:** pre-qualifier and post-scorer initially placed in `generalist/`. Caught by orchestrator — they encode this engine's 8-dimension rubric and well-posedness gate, which have no meaning outside this project.
+
+### Validator loop bypass — root cause and fix
+
+**Root cause:** The loop in CLAUDE.md was aspirational text with no mechanical enforcement. A background session acting as both implementer and orchestrator can call `git commit` directly, skipping committer agent, validator, and all conventions.
+
+**Fix (D-037):**
+- `scripts/hooks/pre-commit`: fires on every `git commit`; blocks if logic files (.py, .sh, agent .md) are staged without `logs/validator_pass.flag`; self-skips for docs-only changes; consumes flag after success (one PASS = one commit)
+- `scripts/install_hooks.sh`: installs hook per checkout (git doesn't track hooks)
+- `committer.md`: requires orchestrator to paste validator PASS verdict before writing flag; explicitly bans `--no-verify`
+- `CLAUDE.md` Hard rules: background sessions named as non-exempt
+
+**Validator PASS on the fix:** All 8 criteria verified end-to-end by validator agent. Hook was confirmed to block logic commits, self-skip docs commits, and consume the flag on success.
+
+**Remaining gap:** Hook is opt-in per checkout — `install_hooks.sh` must be run manually after clone. This is documented in D-037 Implications. No workaround available without a CI pre-receive hook (requires paid GitHub plan).
+
+### Process gaps identified this session
+
+Three gaps surfaced by orchestrator, all sharing the same root cause — **no mandatory end-of-session checklist:**
+
+1. **Validator not invoked** on Priority 2-4 work (first commit). Fixed: D-037 hook.
+2. **learnings.md not updated** post-commit. Fixed: added step 7 to CLAUDE.md loop.
+3. **todo.md not updated** with corrections post-commit. Fixed: added step 7 to CLAUDE.md loop.
+
+Root cause: the loop ends at "commit." No hook, no checklist fires afterwards. Convention without enforcement decays under time pressure and in background sessions.
+
+### D-030 security thread — CLOSED
+The D-030 violation (`.env` file, now deleted) spawned the security-sweep agent and pre-merge gate. Both are now built and live. The open thread from the earlier session is closed.
+
+### Session commit log (2026-06-30)
+
+| Change | D-entry | Files |
+|---|---|---|
+| Pre-merge gate script | D-034 | `scripts/pre_merge_gate.sh` |
+| Security-sweep agent | D-035 | `.claude/agents/dev/security-sweep.md` |
+| Agents directory split (3 tiers) | D-036 | `.claude/agents/generalist/`, `specialist/`, `dev/` |
+| Reclassify security-sweep → dev | D-036 update | rename |
+| Reclassify pre-qualifier, post-scorer → specialist | D-036 update | rename |
+| Validator loop enforcement | D-037 | `scripts/hooks/pre-commit`, `scripts/install_hooks.sh`, `committer.md`, `CLAUDE.md` |
+
+Tests: 227/227 passing throughout.
+
+---
+
 ## What to Tell the Next Session
 
 1. **Main pipeline is end-to-end verified.** transcript-parser → pre-qualifier →

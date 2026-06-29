@@ -47,11 +47,24 @@
 
 ### Priority 4 — Split agents directory  ✓ DONE (2026-06-30)
 - [x] Create `agents/generalist/`, `agents/specialist/`, `agents/dev/` under `.claude/agents/`
-- [x] Generalist: pre-qualifier, post-scorer, process-monitor, researcher, validator, committer
-- [x] Specialist: transcript-parser, parser-evaluator, parser-fixer (domain-specific pipeline agents)
-- [x] Dev: coder, test-writer, security-sweep → `agents/dev/` (dev-workflow tools)
+- [x] Generalist: researcher, validator, committer, process-monitor (general-purpose)
+- [x] Specialist: transcript-parser, parser-evaluator, parser-fixer, pre-qualifier, post-scorer
+      (all domain-specific to this engine — pre-qualifier/post-scorer reclassified post-review)
+- [x] Dev: coder, test-writer, security-sweep (dev-workflow tools, not production eval path)
 - [x] Agent references unchanged — `--agent <name>` matches frontmatter `name:` field, not path
 - [x] Add D-036 to `decisions_tracker.md`
+
+### Post-commit corrections (2026-06-30)
+- [x] Reclassify security-sweep: specialist → dev (it's a dev-workflow gate, not pipeline-specific)
+- [x] Reclassify pre-qualifier + post-scorer: generalist → specialist
+      (user-identified: they encode this engine's rubric and gate — not general-purpose)
+      Validator PASS: all 8 criteria met, 227/227 tests
+- [x] Fix validator loop bypass (D-037):
+      `scripts/hooks/pre-commit` — blocks logic-file commits without `logs/validator_pass.flag`
+      `scripts/install_hooks.sh` — installs hook per-checkout
+      `committer.md` — requires pasted PASS verdict before writing flag
+      `CLAUDE.md` Hard rules — background sessions explicitly non-exempt
+- [x] Fix learnings.md and todo.md not updated post-commit (process gap — no end-of-loop step)
 
 ---
 

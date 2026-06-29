@@ -39,7 +39,7 @@
 - [x] Document gate in `decisions_tracker.md` as D-034
 
 ### Priority 3 — D-030 security-sweep agent  ✓ DONE (2026-06-30)
-- [x] Design `security-sweep` agent (`.claude/agents/specialist/security-sweep.md`):
+- [x] Design `security-sweep` agent (`.claude/agents/dev/security-sweep.md`):
       Scans staged diff for `.env`, plaintext API keys, `ANTHROPIC_API_KEY=`, hardcoded tokens
       Returns JSON PASS/BLOCK with finding at file:line. Never writes.
 - [x] Add D-035 to `decisions_tracker.md`
@@ -48,8 +48,8 @@
 ### Priority 4 — Split agents directory  ✓ DONE (2026-06-30)
 - [x] Create `agents/generalist/`, `agents/specialist/`, `agents/dev/` under `.claude/agents/`
 - [x] Generalist: pre-qualifier, post-scorer, process-monitor, researcher, validator, committer
-- [x] Specialist: transcript-parser, parser-evaluator, parser-fixer, security-sweep
-- [x] Dev scaffolding: coder, test-writer → `agents/dev/`
+- [x] Specialist: transcript-parser, parser-evaluator, parser-fixer (domain-specific pipeline agents)
+- [x] Dev: coder, test-writer, security-sweep → `agents/dev/` (dev-workflow tools)
 - [x] Agent references unchanged — `--agent <name>` matches frontmatter `name:` field, not path
 - [x] Add D-036 to `decisions_tracker.md`
 

@@ -352,7 +352,7 @@
 ### [D-035] Security-sweep agent: read-only credential scanner for staged diffs
 - **Category:** DevOps
 - **Status:** Locked
-- **Implemented in:** .claude/agents/specialist/security-sweep.md
+- **Implemented in:** .claude/agents/dev/security-sweep.md
 - **Decision:** A dedicated `security-sweep` Claude agent scans staged diffs or named files for credential leaks (raw API keys, hardcoded passwords/tokens, tracked `.env` files). It returns a structured JSON verdict (PASS or BLOCK) with specific finding at file:line. It has NO write access.
 - **Rationale:** A grep-only sweep (used in pre_merge_gate.sh) is fast and deterministic for known patterns. The Claude agent layer adds semantic understanding for edge cases (e.g., distinguishing a real token from a test fixture), produces structured machine-readable output, and can be invoked ad-hoc during development. Both layers are complementary.
 - **Implications:** The agent is wired into pre_merge_gate.sh as the backing scanner. Agent output schema uses `verdict: PASS|BLOCK` and a `findings` array with `file`, `line`, `pattern`, `snippet`, `severity`. A false PASS (missed credential) is the worst outcome — the agent is biased toward BLOCK on ambiguous cases.
@@ -363,6 +363,6 @@
 - **Category:** DevOps
 - **Status:** Locked
 - **Implemented in:** .claude/agents/generalist/, .claude/agents/specialist/, .claude/agents/dev/
-- **Decision:** Agent files under `.claude/agents/` are organized into three subdirectories: `generalist/` (pre-qualifier, post-scorer, process-monitor, researcher, validator, committer), `specialist/` (transcript-parser, parser-evaluator, parser-fixer, security-sweep), `dev/` (coder, test-writer). Agent discovery remains by `name:` frontmatter field — the claude harness scans subdirectories recursively.
-- **Rationale:** A flat agents directory has no structural signal for how dangerous or how specialized each agent is. The tier split makes the role of each agent legible at a glance: generalist agents execute safe, bounded judgment; specialist agents have narrow, high-stakes extraction or scanning duties; dev agents scaffold implementation work and are not production paths.
+- **Decision:** Agent files under `.claude/agents/` are organized into three subdirectories: `generalist/` (pre-qualifier, post-scorer, process-monitor, researcher, validator, committer), `specialist/` (transcript-parser, parser-evaluator, parser-fixer), `dev/` (coder, test-writer, security-sweep). Agent discovery remains by `name:` frontmatter field — the claude harness scans subdirectories recursively.
+- **Rationale:** A flat agents directory has no structural signal for how dangerous or how specialized each agent is. The tier split makes the role of each agent legible at a glance: generalist agents execute safe, bounded judgment; specialist agents have narrow, domain-specific extraction duties tied to the transcript pipeline; dev agents are development-workflow tools (gating, scaffolding, implementation) and are not production eval paths.
 - **Implications:** New agents must be placed in the correct tier before their first PR. The `--agent <name>` CLI invocation is unaffected — it matches on the `name:` field, not the file path. If the harness is updated to scope agent access by tier (e.g., restricting specialist agents to specific callers), the subdirectory structure makes that policy trivially enforceable.

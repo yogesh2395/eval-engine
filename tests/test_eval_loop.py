@@ -354,6 +354,24 @@ class TestEvalLoop:
         result = el._extract_json("no json here at all")
         assert "error" in result, "_extract_json must return error dict when no JSON found"
 
+    def test_extract_json_repairs_lone_backslash_in_string(self, el):
+        # Haiku may emit verbatim source chars (e.g. chemical formulas, OCR artifacts)
+        # with lone backslashes like \e or \p that are not valid JSON escapes.
+        raw = '{"path": "C:\\Users\\file", "note": "value"}'
+        result = el._extract_json(raw)
+        assert "error" not in result, (
+            f"_extract_json must repair lone backslashes before json.loads; got {result}"
+        )
+        assert result.get("note") == "value"
+
+    def test_extract_json_does_not_corrupt_valid_escaped_json(self, el):
+        # Valid JSON escape sequences must survive the repair step intact.
+        raw = '{"tab": "a\\tb", "newline": "a\\nb", "slash": "a\\/b"}'
+        result = el._extract_json(raw)
+        assert "error" not in result, (
+            f"_extract_json must not corrupt valid escape sequences; got {result}"
+        )
+
     # AC 9c: No parse_transcript.py import
     def test_no_parse_transcript_import(self, source):
         assert "from parse_transcript import" not in source, (

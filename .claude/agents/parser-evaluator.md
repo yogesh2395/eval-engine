@@ -14,14 +14,16 @@ You check whether the parser extracted faithfully and completely. You produce a 
 
 ### 1. Field completeness
 Every required field must be populated with non-empty, non-placeholder content:
-- problem_statement, initial_framing, final_recommendation, full_transcript, turn_count, extraction_notes
+- problem_statement, initial_framing, final_recommendation, full_transcript, confirmed_case_facts, turn_count, extraction_notes
+- confirmed_case_facts may be an empty array [] — that is acceptable if the transcript has no mid-interview data-reveals; absence of the key entirely is a FIELD_MISSING failure
 - `[Problem statement not found...]` placeholder is acceptable only if extraction_notes confirms it
 - Empty string in approach_framework_text is acceptable only if approach_framework_present is false
 
 ### 2. Information loss
 Spot-check key entities from the raw file against the parsed output:
 - Extract 10–15 specific facts from the raw text: company descriptions, numerical figures, named locations, specific products/services, named people
-- Check what % are present in problem_statement + initial_framing + final_recommendation combined
+- Check what % are present in problem_statement + initial_framing + final_recommendation + confirmed_case_facts combined
+- confirmed_case_facts is an array field; treat each element as text to check against
 - Information loss threshold: <10% = acceptable, 10–20% = flag, >20% = FAIL
 
 ### 3. Boundary accuracy

@@ -3,8 +3,9 @@
 eval_loop.py — runs the full parse→eval pipeline on a manifest of training cases.
 
 CLI:
-    python3 scripts/eval_loop.py [--n N] [--seed SEED]
+    python3 scripts/eval_loop.py [--max-cases N] [--seed SEED]
     python3 scripts/eval_loop.py --manifest path/to/manifest.json
+    python3 scripts/eval_loop.py --confirm-full-run   # runs all training cases (D-033)
 
 For each case:
   a. detect_format.py  (subprocess) → logs/runs/<ts>/<case_id>/format_detection.json
@@ -20,6 +21,7 @@ Uses the `claude` CLI (Pro auth) — no ANTHROPIC_API_KEY required.
 
 import sys
 import os
+import re
 import json
 import argparse
 import subprocess
@@ -35,6 +37,11 @@ LOGS_DIR    = REPO_ROOT / "logs" / "runs"
 
 
 # ── shared JSON extraction ─────────────────────────────────────────────────
+
+def _repair_backslashes(s: str) -> str:
+    """Escape lone backslashes that are not part of a valid JSON escape sequence."""
+    return re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', s)
+
 
 def _extract_json(raw: str) -> dict:
     """Extract JSON object from agent output, tolerating leading/trailing text."""
@@ -53,12 +60,26 @@ def _extract_json(raw: str) -> dict:
     except json.JSONDecodeError:
         pass
 
+    # Repair lone backslashes (agent emitted verbatim source chars, e.g. chemical formulas)
+    repaired = _repair_backslashes(raw)
+    if repaired != raw:
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            pass
+
     # Fall back: find outermost { ... } in case there is preamble/postamble text
     start = raw.find("{")
     end = raw.rfind("}")
     if start >= 0 and end > start:
+        chunk = raw[start : end + 1]
         try:
-            return json.loads(raw[start : end + 1])
+            return json.loads(chunk)
+        except json.JSONDecodeError:
+            pass
+        # Last attempt: repair backslashes in the extracted chunk
+        try:
+            return json.loads(_repair_backslashes(chunk))
         except json.JSONDecodeError as exc:
             return {"error": f"JSON parse failed: {exc}", "raw": raw[:500]}
 
@@ -233,19 +254,35 @@ def main():
     parser = argparse.ArgumentParser(
         description="Eval loop: parse + evaluate a manifest of training cases"
     )
-    parser.add_argument("--n",        type=int,  default=15,   help="Cases to sample (default: 15)")
-    parser.add_argument("--seed",     type=int,  default=42,   help="Random seed (default: 42)")
-    parser.add_argument("--manifest", type=str,  default=None, help="Path to pre-built manifest JSON")
+    parser.add_argument("--max-cases",       type=int,  default=3,
+                        help="Cases to sample per run (default: 3). D-033.")
+    parser.add_argument("--seed",            type=int,  default=42,
+                        help="Random seed (default: 42)")
+    parser.add_argument("--manifest",        type=str,  default=None,
+                        help="Path to pre-built manifest JSON")
+    parser.add_argument("--confirm-full-run", action="store_true",
+                        help="Run the full training set, bypassing --max-cases. "
+                             "Requires explicit orchestrator authorization. D-033.")
     args = parser.parse_args()
 
+    # ── D-033 guard — no unbounded run without explicit opt-in ────────────
     # ── load manifest ──────────────────────────────────────────────────────
     if args.manifest:
         with open(args.manifest, "r", encoding="utf-8") as f:
             manifest = json.load(f)
+        if not args.confirm_full_run and len(manifest) > args.max_cases:
+            print(
+                f"[eval_loop] ERROR: manifest has {len(manifest)} cases but "
+                f"--max-cases is {args.max_cases}. "
+                f"Pass --confirm-full-run to proceed. (D-033)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
     else:
         import case_manifest as cm
         all_cases = cm.build_all_cases()
-        manifest = cm.stratified_sample(all_cases, args.n, args.seed)
+        n_to_sample = len(all_cases) if args.confirm_full_run else args.max_cases
+        manifest = cm.stratified_sample(all_cases, n_to_sample, args.seed)
 
     _check_no_testing_set(manifest)
 

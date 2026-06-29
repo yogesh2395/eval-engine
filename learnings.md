@@ -96,6 +96,19 @@ confirmed failure types to address are:
 
 ---
 
+## Security / D-030 Violation (2026-06-28)
+
+A `.env` file holding the Anthropic API key was created during early pipeline
+development. This violates D-030 (Keychain-only credential storage) and is also
+moot (D-031: the CLI OAuth path requires no API key). Status:
+- `.env` has been deleted from disk
+- `.env` is in `.gitignore` — it cannot be committed accidentally
+- The security-sweep agent (Priority 2) must flag any future `.env` or plaintext
+  secret at the pre-merge gate when built
+- D-030 violation is closed; gate enforcement is deferred until the agent exists
+
+---
+
 ## Open Infrastructure Threads
 
 ### 1. Evaluate all 57 training cases (not just 7)
@@ -103,46 +116,97 @@ Current batch size is 7 per run (~2.5hr wall clock at 2.5min/case). To cover
 all 57 cases, need either: (a) increase batch size with parallelism, or (b) run
 multiple seeds until convergence. No API cost — only Pro auth.
 
-### 2. Parser-fixer loop closure
-Deferred (Units 5+6 in the plan). Once aggregate_failures.py runs on a
-multi-case completed run, the fixer can generate a prompt patch. After patching,
-re-run the same seed to measure delta. This is the RL loop.
+### 2. Parser-fixer loop — iteration 1 complete (2026-06-29)
 
-### 3. Worktree cleanup
-Two stale worktrees remain from this session:
-- `.claude/worktrees/agent-a4feadb7ef73b89db` — eval_loop.py fix (merged to main)
-- `.claude/worktrees/agent-a2aaff5c30a948f4b` — earlier work (check if needed)
-These can be removed: `git worktree remove .claude/worktrees/<name> --force`
+Parser-fixer ran for the first time on combined failure summaries (seed=42 + seed=99).
+4 patches applied to `.claude/agents/transcript-parser.md`:
+- Schema: add `confirmed_case_facts: ["string"]` (INFO_LOSS)
+- Rule: `full_transcript` ban on omitting spoken turns; `confirmed_case_facts` extraction rule (INFO_LOSS)
+- Rule: `problem_statement` explicit stop-phrase signals (BOUNDARY_ERROR)
+- Constraint: ban pronoun substitution (VERBATIM_VIOLATION)
+
+Parser-evaluator updated: checks `confirmed_case_facts` in information_loss spot-check and
+field_completeness. Tests: 225/225 pass.
+
+Re-run with seed=42, `--max-cases 3` pending. Baseline information_loss pass rate = 0.0.
+
+### 3. Worktree cleanup — CLOSED (2026-06-29)
+All 4 stale worktrees removed (agent-a4feadb7ef73b89db, agent-a2aaff5c30a948f4b,
+agent-aa3129cc37a2c313e, agent-acc062a6dd3897dac). Main is clean.
 
 ---
 
-## Session Commit Log (this session's work)
+## First End-to-End Main Pipeline Run (2026-06-29)
 
-| Commit | Change |
+Case: **c03 — Auto Insurance (BFSI, Moderate)**
+Run dir: `logs/runs/20260629_170243/c03/`
+
+| Stage | File | Outcome |
+|---|---|---|
+| transcript-parser | `parse_output.json` | PASS — 12 confirmed_case_facts |
+| pre-qualifier | `prequal_output.json` | CONDITIONAL |
+| post-scorer | `scorer_output.json` | overall_score = 3/5 |
+
+Pre-qualifier CONDITIONAL: framing narrows "profitability declining" → "costs rising"
+before revenue branch is data-justified. "Ignore reinsurance" constraint never surfaced.
+No decision horizon. Flags: reflexive=true, gameable=true.
+
+| Dimension | Score | Note |
+|---|---|---|
+| decomposition | 5 | Clean MECE tree |
+| root_cause | 4 | Mechanistic: young/risky portfolio mix shift |
+| materiality | 5 | Proportional pruning |
+| evidentiary_grounding | 3 | Bare assertion on demographic causation |
+| tradeoff_awareness | **1** | Both interventions as free wins; reflexive+gameable fully missed |
+| feasibility | **2** | No preconditions in regulated market |
+| journey_coherence | 4 | Consistent with framing |
+| calibration | 3 | Broadly commensurate |
+
+Unrounded mean = 3.375 → overall_score = 3. No safety-critical cap triggered.
+Key signal: tradeoff_awareness=1 — structurally captured by rubric, easy to miss in manual review.
+
+---
+
+## Parser RL Loop — Ongoing Methodology
+
+Periodically when the next run of aggregate_failures.py completes or is triggered,
+pass onto the fixer to make further improvements. After fix-rerun to measure delta
+with same seed. Close loop only with significant improvement. Significant improvement
+depends on the baseline and delta. For low baseline, delta should be min 10%.
+As baseline rate improves trim delta to 5% improvement gradually. This is the RL loop.
+
+---
+
+## Session Commit Log (2026-06-29)
+
+| Change | Files |
 |---|---|
-| `08e51e9` | Fix eval_loop: claude CLI agents, no API credits required |
-| `345aed3` | Fix evaluator: file paths instead of inline JSON (D-032) |
+| D-033: `--max-cases 3` default, `--confirm-full-run` guard | `scripts/eval_loop.py` |
+| Parser RL loop iteration 1: 4 patches + evaluator update | `.claude/agents/transcript-parser.md`, `.claude/agents/parser-evaluator.md` |
+| `_extract_json` lone-backslash repair (c35 class unblocked) | `scripts/eval_loop.py` |
+| `confirmed_case_facts` added to test schema | `tests/test_parser_agents.py` |
+| 2 new `_extract_json` tests | `tests/test_eval_loop.py` |
+| committer.md: progress bar + session-close principle | `.claude/agents/committer.md` |
+| TODO.md created | `TODO.md` |
 
-These build on top of commits `dc3de81`, `0806ac1`, `3c4cb41` from earlier in
-the session (eval pipeline scaffold, haiku agent switch, .claudeignore).
-
-Branch is 5 commits ahead of `origin/main` — push before closing if desired.
+Tests: 227/227 passing.
 
 ---
 
 ## What to Tell the Next Session
 
-1. The eval pipeline works end-to-end. Parser (transcript-parser, haiku) and
-   evaluator (parser-evaluator) both run via `claude -p --agent` (Pro auth, no credits).
+1. **Main pipeline is end-to-end verified.** transcript-parser → pre-qualifier →
+   post-scorer ran on c03. Persistent outputs in `logs/runs/20260629_170243/c03/`.
 
-2. Parser passes field_completeness, boundary_accuracy, speaker_attribution.
-   Parser fails information_loss and verbatim_constraint — specific fixes identified.
+2. **Two loops — do not conflate:**
+   - Main eval loop: `detect_format → [A] transcript-parser → pre-qualifier → post-scorer`
+   - Dev/parser loop: `eval_loop.py → transcript-parser → parser-evaluator → aggregate_failures → parser-fixer`
+   Current `eval_loop.py` is the **dev loop only**.
 
-3. The next unit of work is the **parser-fixer loop**:
-   - Run `aggregate_failures.py` on completed run dirs
-   - Feed failure_summary.json to parser-fixer agent
-   - Apply patch to transcript-parser.md
-   - Re-run same seeds to measure delta
+3. **Parser RL loop iteration 2:** feed `logs/failures/failure_summary_20260629_170243.json`
+   to parser-fixer (focus: c69 INFO_LOSS). Re-run `--manifest logs/runs/20260629_170243/manifest.json`
+   for apples-to-apples delta. Stop-rule: information_loss >= 0.8 with 0 hard errors.
 
-4. The `decisions_tracker.md` is authoritative for architecture state. D-031 and
-   D-032 were added this session and reflect the active canonical paths.
+4. **TODO.md is the task queue.** Priorities 2-5 start after RL loop reaches stop-rule.
+
+5. `decisions_tracker.md` is authoritative. D-033 now fully implemented.

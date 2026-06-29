@@ -111,7 +111,7 @@ class TestTranscriptParserSchema:
             f"transcript-parser must use the fast extraction model (haiku), not {model!r}"
         )
 
-    # AC: output schema contains all 14 required fields
+    # AC: output schema contains all 15 required fields
     @pytest.mark.parametrize("field", [
         "case_title",
         "case_category",
@@ -123,6 +123,7 @@ class TestTranscriptParserSchema:
         "reasoning_trace",
         "final_recommendation",
         "full_transcript",
+        "confirmed_case_facts",
         "approach_framework_present",
         "approach_framework_text",
         "turn_count",

@@ -23,6 +23,8 @@ Keystone principle: build the scorer before any routing logic.
 - No orchestration platform build. No model-router build.
 - Validator gates everything. A false PASS is failure.
 - 2-3 parallel streams max — your review bandwidth is the real ceiling.
+- **No logic-file commit without validator PASS.** The pre-commit hook enforces this via `logs/validator_pass.flag`. `--no-verify` is banned.
+- **Background sessions are not exempt.** Acting as both implementer and orchestrator does not dissolve the validator requirement. Invoke the validator agent, get an explicit PASS, then hand off to committer.
 
 ## Architecture principles
 - Core evals are built with full rigor — no simplification that diminishes diagnostic utility.

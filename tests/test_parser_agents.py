@@ -20,9 +20,9 @@ import yaml
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AGENTS_DIR = os.path.join(REPO_ROOT, ".claude", "agents")
 
-TRANSCRIPT_PARSER_PATH = os.path.join(AGENTS_DIR, "transcript-parser.md")
-PARSER_EVALUATOR_PATH = os.path.join(AGENTS_DIR, "parser-evaluator.md")
-PARSER_FIXER_PATH = os.path.join(AGENTS_DIR, "parser-fixer.md")
+TRANSCRIPT_PARSER_PATH = os.path.join(AGENTS_DIR, "specialist", "transcript-parser.md")
+PARSER_EVALUATOR_PATH = os.path.join(AGENTS_DIR, "specialist", "parser-evaluator.md")
+PARSER_FIXER_PATH = os.path.join(AGENTS_DIR, "specialist", "parser-fixer.md")
 
 
 # ---------------------------------------------------------------------------

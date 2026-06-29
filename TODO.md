@@ -16,39 +16,42 @@
 
 ---
 
-## NEXT SESSION — Parser RL loop iteration 2
+## Parser RL loop iteration 2 — CLOSED ✓ (2026-06-30)
 
-- [ ] Run `aggregate_failures.py` on `logs/runs/20260629_170243/`  ← already done, file exists
-- [ ] Feed `failure_summary_20260629_170243.json` to parser-fixer
+- [x] Run `aggregate_failures.py` on `logs/runs/20260629_170243/`
+- [x] Feed `failure_summary_20260629_170243.json` to parser-fixer
       Focus: c69 INFO_LOSS (objective clarification miss: "maximize economic worth")
-- [ ] Apply fixer patch to `transcript-parser.md`
-- [ ] Re-run with SAME manifest (`--manifest logs/runs/20260629_170243/manifest.json`)
-      for apples-to-apples delta vs. this run's baseline
-- [ ] Compute delta: need ≥10% improvement (low baseline) to close iteration 2
-- [ ] Stop-rule: information_loss ≥ 0.8 with 0 hard errors → loop done
+- [x] Apply fixer patch to `transcript-parser.md` (3 patches)
+- [x] Re-run → `logs/runs/20260630_003738/` — 3/3 completed, 0 errors
+- [x] Delta: information_loss 0.50 → 1.00 (+50pp), speaker_attribution 0.50 → 1.00 (+50pp)
+- [x] Stop-rule: information_loss = 1.0 ≥ 0.8 ✓ | hard FAIL = 0 ✓ → loop closed
 
 ---
 
-## AFTER RL LOOP REACHES STOP-RULE
+## AFTER RL LOOP REACHES STOP-RULE — ✓ DONE (2026-06-30)
 
-### Priority 2 — Branching + merge gate
-- [ ] Enable branch protection on `main` (no direct push, require PR)
-- [ ] Write pre-merge gate script: runs `pytest tests/` + security sweep + flags open D-entries
-- [ ] Document gate in `decisions_tracker.md`
+### Priority 2 — Branching + merge gate  ✓ DONE (2026-06-30)
+- [x] Enable branch protection on `main` — N/A: GitHub requires paid plan (Pro/Team) for
+      branch protection on private repos. Gate script is the sole enforcement mechanism.
+- [x] Write pre-merge gate script: `scripts/pre_merge_gate.sh`
+      Runs pytest + security sweep + D-entry scan; exits 0 (PASS) or 1 (FAIL)
+      Usage: `./scripts/pre_merge_gate.sh` or `--staged` for staged-only scan
+- [x] Document gate in `decisions_tracker.md` as D-034
 
-### Priority 3 — D-030 security-sweep agent
-- [ ] Design `security-sweep` agent (`.claude/agents/security-sweep.md`):
+### Priority 3 — D-030 security-sweep agent  ✓ DONE (2026-06-30)
+- [x] Design `security-sweep` agent (`.claude/agents/specialist/security-sweep.md`):
       Scans staged diff for `.env`, plaintext API keys, `ANTHROPIC_API_KEY=`, hardcoded tokens
-      Returns PASS/BLOCK with specific finding + file:line. Never writes.
-- [ ] Add new D-entry to `decisions_tracker.md` (D-034 or next available)
-- [ ] Wire into pre-merge gate (Priority 2)
+      Returns JSON PASS/BLOCK with finding at file:line. Never writes.
+- [x] Add D-035 to `decisions_tracker.md`
+- [x] Wire into pre-merge gate — pre_merge_gate.sh runs grep sweep; agent available ad-hoc
 
-### Priority 4 — Split agents directory
-- [ ] Create `agents/generalist/` and `agents/specialist/` under `.claude/agents/`
-- [ ] Generalist: pre-qualifier, post-scorer, process-monitor, researcher, validator, committer
-- [ ] Specialist: transcript-parser, parser-evaluator, parser-fixer, security-sweep
-- [ ] Dev scaffolding: coder, test-writer → `agents/dev/`
-- [ ] Update all agent references
+### Priority 4 — Split agents directory  ✓ DONE (2026-06-30)
+- [x] Create `agents/generalist/`, `agents/specialist/`, `agents/dev/` under `.claude/agents/`
+- [x] Generalist: pre-qualifier, post-scorer, process-monitor, researcher, validator, committer
+- [x] Specialist: transcript-parser, parser-evaluator, parser-fixer, security-sweep
+- [x] Dev scaffolding: coder, test-writer → `agents/dev/`
+- [x] Agent references unchanged — `--agent <name>` matches frontmatter `name:` field, not path
+- [x] Add D-036 to `decisions_tracker.md`
 
 ---
 

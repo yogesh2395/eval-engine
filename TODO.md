@@ -87,7 +87,7 @@ stubs, loop self-audit). Plan: `.claude/plans/lucky-hopping-waterfall.md`.
       non-penalty rule for interviewer-directed pruning (scoped, other CONDITIONAL causes
       preserved). Validator PASS (7/7, incl. neutrality gate), 249/249 tests. Nudge hand-off in
       a runnable pipeline still needs main-loop wiring.
-- [ ] **Unit D — Persona/ideal/meta stubs** (D-041): harsh/generous graders, persona-comparer
+- [x] **Unit D — Persona/ideal/meta stubs** (D-041): harsh/generous graders, persona-comparer
       (STUB, not wired); ideal-solution + dimension-sufficiency D-entries + overfitting guardrail.
 - [ ] **Unit E — Loop self-audit** (D-042): CLAUDE.md audit-before-push step; `workflow_audit.md`
       session deliverable (gaps + self-fixes + ranked recs).
@@ -99,6 +99,28 @@ stubs, loop self-audit). Plan: `.claude/plans/lucky-hopping-waterfall.md`.
 ### Priority 5 — Model seam
 - Deferred until post-scorer validates. Do not conflate dev-tooling model lane with
   product routing. Log an explicit D-entry when ready to revisit.
+
+### Persona graders + persona-comparer (D-041)
+- Design + stub only (`.claude/agents/specialist/harsh-grader.md`, `generous-grader.md`,
+  `persona-comparer.md`). NOT wired into the live pipeline. Wire only AFTER the neutral
+  post-scorer has validated across a meaningful case sample — personas and the comparer attach
+  to an already-trusted neutral baseline, not a still-unvalidated one.
+
+### Ideal Score Solution (D-041)
+- Backend-only concept: per response, what pushes each dimension to its max and the resulting
+  overall score, used as an internal RL delta (post-scorer vs ideal). **Overfitting guardrail:**
+  do NOT auto-tune the engine on the AI-generated ideal solution — risk of overfitting to
+  AI-led generation rather than human feedback. The real RL loop is post-launch and
+  human-driven: ideal solution pushed to users -> explicit + implicit user feedback -> neutral
+  evaluator on efficacy of the ideal solution -> neutral evaluator on adoption -> only
+  human-feedback-verified improvements are routed to the main scoring-engine improver.
+
+### Dimension-sufficiency meta-check (D-041)
+- Per case: Q1 "did the 8 dimensions capture the essence of the evaluation well?"; Q2 "if not,
+  what other dimension(s) are needed, and how large is the delta?" Metadata for a post-score
+  improvement loop only, not a live gate. Threshold: a recurring missing dimension is promoted
+  to the fixer agents for rubric evolution only after it is flagged as critical across
+  **>=10 end-to-end cases**.
 
 ---
 

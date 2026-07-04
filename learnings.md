@@ -371,3 +371,21 @@ unaffected. So c03 would correctly shed the FALSE component while the legitimate
 tests green. Inferred — the actual re-run gate outcome (CONDITIONAL-for-right-reason vs PASS) can only
 be confirmed once the nudge hand-off is wired into a runnable pipeline (still a RECOMMENDED TODO); this
 unit changes agent/spec contracts, not the runner.
+
+### Unit D — Persona/ideal/meta surfaces: design + stub only (D-041) — validator PASS, 249/249
+
+Per user directive (design + stub, not wired), created three STUB agents under specialist/:
+harsh-grader, generous-grader, persona-comparer — each a parametrized variant/consumer of the
+neutral post-scorer over the SAME 8 dimensions (no new dimensions invented), banner-marked
+"NOT WIRED INTO THE PIPELINE" in both frontmatter and body. Validator verified (grep) that nothing
+references them from any runnable pipeline file — the slots exist for later attachment only.
+
+D-041 also captures two backend-only design concepts, deliberately NOT built:
+- **Ideal Score Solution** with an explicit **overfitting guardrail**: do not auto-tune the engine
+  on an AI-generated ideal; the real RL loop is post-launch and human-driven (ideal → user
+  feedback → neutral efficacy eval → neutral adoption eval → main-engine improver).
+- **Dimension-sufficiency meta-check**: per-case Q1/Q2 metadata; a recurring missing dimension is
+  promoted to the fixer only after ≥10 end-to-end cases flag it critical.
+
+Design intent recorded so the architecture is decided; wiring waits until the neutral post-scorer
+validates across a meaningful sample (personas attach to a trusted baseline, not an unvalidated one).

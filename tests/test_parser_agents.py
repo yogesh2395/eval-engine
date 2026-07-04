@@ -124,6 +124,7 @@ class TestTranscriptParserSchema:
         "final_recommendation",
         "full_transcript",
         "confirmed_case_facts",
+        "interviewer_nudges",
         "approach_framework_present",
         "approach_framework_text",
         "turn_count",
@@ -234,6 +235,64 @@ class TestTranscriptParserSchema:
             "reasoning_trace rules must explicitly EXCLUDE interviewer turns; "
             "both 'Exclude' and 'interviewer' must appear in the reasoning_trace section. "
             f"Section text:\n{rt}"
+        )
+
+    # AC: initial_framing explicitly excludes interviewer turns
+    def test_initial_framing_explicitly_excludes_interviewer_turns(self, agent):
+        section = _field_section(agent["body"], "initial_framing")
+        assert section, (
+            "Could not locate **initial_framing** field section in body"
+        )
+        has_exclude_interviewer = bool(
+            re.search(
+                r"Exclude.*interviewer|interviewer.*[Ee]xclude",
+                section,
+                re.DOTALL,
+            )
+        )
+        assert has_exclude_interviewer, (
+            "initial_framing rules must explicitly EXCLUDE interviewer turns; "
+            "both 'Exclude' and 'interviewer' must appear in the initial_framing section. "
+            f"Section text:\n{section}"
+        )
+
+    # AC: final_recommendation explicitly excludes interviewer turns
+    def test_final_recommendation_explicitly_excludes_interviewer_turns(self, agent):
+        section = _field_section(agent["body"], "final_recommendation")
+        assert section, (
+            "Could not locate **final_recommendation** field section in body"
+        )
+        has_exclude_interviewer = bool(
+            re.search(
+                r"Exclude.*interviewer|interviewer.*[Ee]xclude",
+                section,
+                re.DOTALL,
+            )
+        )
+        assert has_exclude_interviewer, (
+            "final_recommendation rules must explicitly EXCLUDE interviewer turns; "
+            "both 'Exclude' and 'interviewer' must appear in the final_recommendation section. "
+            f"Section text:\n{section}"
+        )
+
+    # AC: a Step 0 speaker-attribution pass runs before any field is populated
+    def test_step_0_speaker_attribution_pass_is_described(self, agent):
+        body = agent["body"]
+        assert re.search(r"Step 0", body), (
+            "transcript-parser must describe a 'Step 0' speaker-attribution pass"
+        )
+        assert re.search(r"[Ss]peaker.attribution", body), (
+            "transcript-parser must describe a speaker-attribution pass"
+        )
+        has_runs_first = bool(
+            re.search(
+                r"runs FIRST|before any (output )?field is populated|"
+                r"[Bb]efore populating any (output )?field",
+                body,
+            )
+        )
+        assert has_runs_first, (
+            "transcript-parser Step 0 must state it runs before any field is populated"
         )
 
     # AC: reasoning_trace explicitly excludes approach_framework_text

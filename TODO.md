@@ -68,11 +68,62 @@
 
 ---
 
+## Eval Engine Improvements session (2026-07-04) — Units A–E
+
+Source: user improvement brief (scorer output, monitor leakage check, parser nudges, persona
+stubs, loop self-audit). Plan: `.claude/plans/lucky-hopping-waterfall.md`.
+
+- [x] **Unit A — Scorer mechanics** (D-038): decimal `overall_score`; `score_breakdown`
+      {process 4.5 / recommendation 2.25 on c03}; `aggregation` {equal_weighted 3.375,
+      conditioner_adaptive 2.938, critical_floor 3.375, scaled_percentile stub}; mandatory
+      `dimension_justifications`. Validator PASS (8/8), 237/237 tests.
+- [x] **Unit B — Mechanical leakage checker in process-monitor** (D-039):
+      `scripts/check_justification_completeness.py`; process-monitor `design_execution_leakage`
+      section; validator justification-completeness FAIL criterion. Validator PASS (7/7); checker
+      exits 1 on real c03 (all 8 dims missing), 244/244 tests. Note: runnable stage-wrapper is
+      documented intent — needs main-loop wiring.
+- [x] **Unit C — Parser interviewer_nudges + speaker attribution** (D-040):
+      transcript-parser Step 0 attribution + `interviewer_nudges` field; pre-qualifier
+      non-penalty rule for interviewer-directed pruning (scoped, other CONDITIONAL causes
+      preserved). Validator PASS (7/7, incl. neutrality gate), 249/249 tests. Nudge hand-off in
+      a runnable pipeline still needs main-loop wiring.
+- [x] **Unit D — Persona/ideal/meta stubs** (D-041): harsh/generous graders, persona-comparer
+      (STUB, not wired); ideal-solution + dimension-sufficiency D-entries + overfitting guardrail.
+- [x] **Unit E — Loop self-audit** (D-042): CLAUDE.md loop steps 7–8 (knowledge-base + workflow
+      self-audit before push); `workflow_audit.md` deliverable (gaps ranked, self-fixes, recs);
+      self-fixed `install_hooks.sh` to be worktree-aware (verified exit 0 from worktree).
+      Top audit finding → **integrate the main eval loop** (see RECOMMENDED below) to convert
+      Units A–C contracts into runnable behavior.
+
+---
+
 ## HOLD
 
 ### Priority 5 — Model seam
 - Deferred until post-scorer validates. Do not conflate dev-tooling model lane with
   product routing. Log an explicit D-entry when ready to revisit.
+
+### Persona graders + persona-comparer (D-041)
+- Design + stub only (`.claude/agents/specialist/harsh-grader.md`, `generous-grader.md`,
+  `persona-comparer.md`). NOT wired into the live pipeline. Wire only AFTER the neutral
+  post-scorer has validated across a meaningful case sample — personas and the comparer attach
+  to an already-trusted neutral baseline, not a still-unvalidated one.
+
+### Ideal Score Solution (D-041)
+- Backend-only concept: per response, what pushes each dimension to its max and the resulting
+  overall score, used as an internal RL delta (post-scorer vs ideal). **Overfitting guardrail:**
+  do NOT auto-tune the engine on the AI-generated ideal solution — risk of overfitting to
+  AI-led generation rather than human feedback. The real RL loop is post-launch and
+  human-driven: ideal solution pushed to users -> explicit + implicit user feedback -> neutral
+  evaluator on efficacy of the ideal solution -> neutral evaluator on adoption -> only
+  human-feedback-verified improvements are routed to the main scoring-engine improver.
+
+### Dimension-sufficiency meta-check (D-041)
+- Per case: Q1 "did the 8 dimensions capture the essence of the evaluation well?"; Q2 "if not,
+  what other dimension(s) are needed, and how large is the delta?" Metadata for a post-score
+  improvement loop only, not a live gate. Threshold: a recurring missing dimension is promoted
+  to the fixer agents for rubric evolution only after it is flagged as critical across
+  **>=10 end-to-end cases**.
 
 ---
 

@@ -604,3 +604,243 @@ class TestAggregateFailures:
             f"worst_category must be 'Market Entry' (0% pass rate vs "
             f"Profitability 100%); got {main_run['worst_category']!r}"
         )
+
+
+# ===========================================================================
+# Group 4: TestAggregateScore
+# ===========================================================================
+
+class TestAggregateScore:
+    """
+    Acceptance criteria for scripts/aggregate_score.py.
+
+    The c03 SELF-CHECK vector (Unit A plan):
+        {decomposition:5, root_cause:4, materiality:5, evidentiary_grounding:3,
+         tradeoff_awareness:1, feasibility:2, journey_coherence:4, calibration:3}
+        conditioned_by = {cardinality:"multiple", verifiability:"indirect",
+                           flags:{distributional:false, intractable:false,
+                                  reflexive:true, gameable:true}}
+    """
+
+    @pytest.fixture(scope="class")
+    def asc(self):
+        return _import_script("aggregate_score")
+
+    @pytest.fixture(scope="class")
+    def c03_scores(self):
+        return {
+            "decomposition": 5,
+            "root_cause": 4,
+            "materiality": 5,
+            "evidentiary_grounding": 3,
+            "tradeoff_awareness": 1,
+            "feasibility": 2,
+            "journey_coherence": 4,
+            "calibration": 3,
+        }
+
+    @pytest.fixture(scope="class")
+    def c03_conditioned_by(self):
+        return {
+            "cardinality": "multiple",
+            "verifiability": "indirect",
+            "flags": {
+                "distributional": False,
+                "intractable": False,
+                "reflexive": True,
+                "gameable": True,
+            },
+        }
+
+    def test_file_exists(self):
+        assert (SCRIPTS_DIR / "aggregate_score.py").is_file(), (
+            f"scripts/aggregate_score.py not found at {SCRIPTS_DIR / 'aggregate_score.py'}"
+        )
+
+    def test_equal_weighted_c03(self, asc, c03_scores):
+        result = asc.equal_weighted(c03_scores)
+        assert result == 3.375, f"equal_weighted(c03) must be 3.375; got {result}"
+
+    def test_conditioner_adaptive_c03(self, asc, c03_scores, c03_conditioned_by):
+        result = asc.conditioner_adaptive(c03_scores, c03_conditioned_by)
+        assert result == 2.938, (
+            f"conditioner_adaptive(c03) must round to 2.938 (47/16 = 2.9375); got {result}"
+        )
+
+    def test_critical_floor_c03(self, asc, c03_scores):
+        result = asc.critical_floor(c03_scores)
+        assert result == 3.375, (
+            f"critical_floor(c03) must be 3.375 (critical_min=3 -> ceiling 3.75, "
+            f"raw mean 3.375 < ceiling); got {result}"
+        )
+
+    def test_process_score_c03(self, asc, c03_scores):
+        breakdown = asc.score_breakdown(c03_scores)
+        assert breakdown["process_score"] == 4.5, (
+            f"process_score(c03) must be 4.5; got {breakdown['process_score']}"
+        )
+
+    def test_recommendation_score_c03(self, asc, c03_scores):
+        breakdown = asc.score_breakdown(c03_scores)
+        assert breakdown["recommendation_score"] == 2.25, (
+            f"recommendation_score(c03) must be 2.25; got {breakdown['recommendation_score']}"
+        )
+
+    def test_scaled_percentile_returns_none(self, asc, c03_scores):
+        result = asc.scaled_percentile(c03_scores)
+        assert result is None, (
+            f"scaled_percentile is forward-looking and must return None in v1; got {result}"
+        )
+
+    def test_aggregate_all_scaled_percentile_is_none(self, asc, c03_scores, c03_conditioned_by):
+        result = asc.aggregate_all(c03_scores, c03_conditioned_by)
+        assert result["scaled_percentile"] is None, (
+            f"aggregate_all(c03)['scaled_percentile'] must be None; got {result['scaled_percentile']}"
+        )
+
+    def test_critical_floor_ceiling_at_critical_min_1(self, asc):
+        # A safety-critical dim scored 1 -> ceiling = 1.5 + 0.75*1 = 2.25.
+        scores = {
+            "decomposition": 5,
+            "root_cause": 1,
+            "materiality": 5,
+            "evidentiary_grounding": 5,
+            "tradeoff_awareness": 5,
+            "feasibility": 5,
+            "journey_coherence": 5,
+            "calibration": 5,
+        }
+        result = asc.critical_floor(scores)
+        assert result == 2.25, (
+            f"critical_floor with critical_min=1 must cap at 2.25 "
+            f"(1.5 + 0.75*1); got {result}"
+        )
+
+    def test_binary_cap_ceiling_at_critical_min_1(self, asc):
+        # Same vector: binary_cap_ceiling / equal_weighted must show the
+        # hard cliff cap at 3.0 (since root_cause=1 <= 2).
+        scores = {
+            "decomposition": 5,
+            "root_cause": 1,
+            "materiality": 5,
+            "evidentiary_grounding": 5,
+            "tradeoff_awareness": 5,
+            "feasibility": 5,
+            "journey_coherence": 5,
+            "calibration": 5,
+        }
+        ceiling = asc.binary_cap_ceiling(scores)
+        assert ceiling == 3.0, f"binary_cap_ceiling must be 3.0 when a safety-critical dim <=2; got {ceiling}"
+        result = asc.equal_weighted(scores)
+        assert result == 3.0, f"equal_weighted must be capped at 3.0; got {result}"
+
+
+# ===========================================================================
+# Group 5: TestJustificationCompleteness
+# ===========================================================================
+
+class TestJustificationCompleteness:
+    """
+    Acceptance criteria for scripts/check_justification_completeness.py.
+
+    Uses the importable check_completeness() function directly — no
+    subprocess needed. All fixtures are inline/synthetic (no dependency on
+    logs/runs, which is gitignored).
+    """
+
+    @pytest.fixture(scope="class")
+    def cjc(self):
+        return _import_script("check_justification_completeness")
+
+    def test_file_exists(self):
+        assert (SCRIPTS_DIR / "check_justification_completeness.py").is_file(), (
+            f"scripts/check_justification_completeness.py not found at "
+            f"{SCRIPTS_DIR / 'check_justification_completeness.py'}"
+        )
+
+    def test_complete_case_is_pass_with_no_missing(self, cjc):
+        criterion_scores = {
+            "decomposition": 5,
+            "root_cause": 4,
+            "materiality": 5,
+        }
+        dimension_justifications = {
+            "decomposition": 'Candidate said: "I would split this into revenue and cost."',
+            "root_cause": 'Candidate cited: "claims frequency rose 12% YoY."',
+            "materiality": 'Candidate quantified: "this is $8M of the $10M gap."',
+        }
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "PASS", f"expected PASS; got {result}"
+        assert result["missing"] == [], f"expected no missing dims; got {result['missing']}"
+
+    def test_missing_root_cause_is_fail(self, cjc):
+        criterion_scores = {
+            "decomposition": 5,
+            "root_cause": 4,
+            "materiality": 5,
+        }
+        dimension_justifications = {
+            "decomposition": 'Candidate said: "I would split this into revenue and cost."',
+            "materiality": 'Candidate quantified: "this is $8M of the $10M gap."',
+            # root_cause deliberately absent — this is the c03 leak.
+        }
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "FAIL", f"expected FAIL; got {result}"
+        assert "root_cause" in result["missing"], (
+            f"expected 'root_cause' in missing; got {result['missing']}"
+        )
+
+    def test_empty_string_justification_counts_as_missing(self, cjc):
+        criterion_scores = {"root_cause": 4}
+        dimension_justifications = {"root_cause": "   "}
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "FAIL", f"expected FAIL; got {result}"
+        assert result["missing"] == ["root_cause"], (
+            f"expected ['root_cause']; got {result['missing']}"
+        )
+
+    def test_na_dimension_does_not_require_justification(self, cjc):
+        criterion_scores = {
+            "root_cause": 4,
+            "journey_coherence": "N/A",
+        }
+        dimension_justifications = {
+            "root_cause": 'Candidate cited: "claims frequency rose 12%."',
+        }
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "PASS", f"expected PASS; got {result}"
+        assert "journey_coherence" not in result["missing"], (
+            f"N/A dim must not appear in missing; got {result['missing']}"
+        )
+
+    def test_old_shape_with_no_justifications_fails_naming_all_eight(self, cjc):
+        criterion_scores = {
+            "decomposition": 5,
+            "root_cause": 4,
+            "materiality": 5,
+            "evidentiary_grounding": 3,
+            "tradeoff_awareness": 1,
+            "feasibility": 2,
+            "journey_coherence": 4,
+            "calibration": 3,
+        }
+        dimension_justifications = {}
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "FAIL", f"expected FAIL; got {result}"
+        assert result["missing"] == sorted(criterion_scores.keys()), (
+            f"expected all 8 dims named as missing; got {result['missing']}"
+        )
+        assert len(result["missing"]) == 8
+
+    def test_quote_warning_is_advisory_and_does_not_flip_pass_to_fail(self, cjc):
+        criterion_scores = {"root_cause": 4}
+        dimension_justifications = {
+            "root_cause": "Candidate cited claims frequency rose without a verbatim quote",
+        }
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "PASS", (
+            f"a missing quote is advisory only and must not cause FAIL; got {result}"
+        )
+        assert "root_cause" in result["quote_warnings"], (
+            f"expected 'root_cause' in quote_warnings; got {result['quote_warnings']}"
+        )

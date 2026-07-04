@@ -36,7 +36,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "neutrality_note",
 }
 
-EXPECTED_IO_INPUT_KEYS = {"prompt", "initial_framing"}
+EXPECTED_IO_INPUT_KEYS = {"prompt", "initial_framing", "interviewer_nudges"}
 
 EXPECTED_IO_OUTPUT_KEYS = {
     "gate",
@@ -257,8 +257,8 @@ class TestIOShape:
         assert "io_shape" in spec, "io_shape key missing — Group 2 tests cannot run"
         self.io = spec["io_shape"]
 
-    def test_io_shape_input_has_exactly_prompt_and_initial_framing(self):
-        """io_shape.input has exactly keys prompt and initial_framing."""
+    def test_io_shape_input_has_exactly_prompt_initial_framing_and_interviewer_nudges(self):
+        """io_shape.input has exactly keys prompt, initial_framing, and interviewer_nudges."""
         inp = self.io.get("input")
         assert isinstance(inp, dict), "io_shape.input must be a mapping"
         assert set(inp.keys()) == EXPECTED_IO_INPUT_KEYS, (
@@ -416,6 +416,32 @@ class TestWellPosednessGate:
         )
         assert isinstance(bca, str) and bca.strip(), (
             "well_posedness_gate.block_cta_requirements must be a non-empty string"
+        )
+
+    def test_well_posedness_gate_documents_interviewer_directed_pruning_non_penalty_rule(
+        self, well_posedness_gate
+    ):
+        """well_posedness_gate has a sub_check documenting the interviewer-directed-pruning non-penalty rule."""
+        assert well_posedness_gate is not None, "well_posedness_gate check not found"
+        sub_checks = well_posedness_gate.get("sub_checks") or []
+        sub_ids = {sc.get("id") for sc in sub_checks if isinstance(sc, dict)}
+        assert "interviewer_directed_pruning" in sub_ids, (
+            "well_posedness_gate.sub_checks must include an "
+            "'interviewer_directed_pruning' sub_check id. Found: "
+            f"{sub_ids}"
+        )
+        sub_check = next(
+            sc for sc in sub_checks
+            if isinstance(sc, dict) and sc.get("id") == "interviewer_directed_pruning"
+        )
+        description = sub_check.get("description", "")
+        assert re.search(r"interviewer", description, re.IGNORECASE), (
+            "interviewer_directed_pruning sub_check must reference 'interviewer' "
+            f"in its description; got: {description!r}"
+        )
+        assert re.search(r"CONDITIONAL", description), (
+            "interviewer_directed_pruning sub_check must reference the "
+            f"CONDITIONAL non-penalty rule; got: {description!r}"
         )
 
     def test_well_posedness_gate_has_data_declaration_sub_check_or_data_sufficiency_note(

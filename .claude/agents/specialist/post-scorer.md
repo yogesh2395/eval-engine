@@ -80,12 +80,20 @@ Is confidence level commensurate with evidentiary strength?
 
 ### Step 4 — Aggregation (constitutional, non-negotiable)
 1. gate=BLOCK → no score, return blocked payload.
-2. Cap check: if any of {root_cause, evidentiary_grounding, calibration (when not N/A)} scores ≤2 → cap overall_score at 3. Note which dimension triggered the cap in justification.
-3. Base score: equal-weighted average of all non-N/A dimensions, rounded to nearest integer.
-4. Apply cap: overall_score = min(computed, cap).
+2. Compute the exact mean of all non-N/A dimensions — no integer rounding, ever. Report to <=3 decimal places.
+3. Compute all three aggregators using `scripts/aggregate_score.py` semantics:
+   - `equal_weighted` — the exact non-N/A mean from step 2, with the binary safety cap applied: if any of {root_cause, evidentiary_grounding, calibration (when not N/A)} scores ≤2 → cap at min(mean, 3.0). Note which dimension triggered the cap in justification if it fires.
+   - `conditioner_adaptive` — weighted mean where dimensions named by the active conditioners (cardinality, verifiability, flags — see conditioned_by) carry extra weight, same binary cap applied. This is an alternate, not the headline.
+   - `critical_floor` — graduated alternative to the binary cap: raw mean capped at min(5.0, 1.5 + 0.75 * critical_min) where critical_min is the lowest present safety-critical dimension. Shown alongside as an alternate.
+   - `scaled_percentile` — not computed in v1; always null (needs the repository's accreted case population).
+4. `overall_score` = `equal_weighted` for now (the primary headline). Emit all four under `aggregation` so the alternates can be compared before any is promoted.
+5. Compute `score_breakdown`:
+   - `process_score` = mean of non-N/A members of {decomposition, root_cause, materiality, journey_coherence}.
+   - `recommendation_score` = mean of non-N/A members of {tradeoff_awareness, feasibility, evidentiary_grounding, calibration}.
+   The recommendation group is where the reflexive/gameable/counterfactual conditioners bite — those flags re-anchor tradeoff_awareness, feasibility, and calibration, so a weak recommendation_score on a reflexive/gameable problem is the discriminating signal, not the blended overall_score.
 
 ### Step 5 — Justification (mandatory)
-- 150-300 words.
+- 150-300 words (headline justification).
 - Name which criterion/criteria drove the overall_score.
 - If a cap applied: name the triggering safety-critical dimension and why it scored ≤2.
 - Include 2-3 verbatim quotes from the response as evidence; attribute each to the criterion it evidences.
@@ -93,9 +101,10 @@ Is confidence level commensurate with evidentiary strength?
 - If cardinality=unique AND verifiability=direct: note the solution-verification stub was not run (v1 limitation).
 - Do not cite response length as a quality signal.
 - Label all inferences as inferences.
+- **`dimension_justifications` (mandatory, in addition to the headline justification):** one entry per non-N/A dimension in `criterion_scores`. Each entry must contain a stated observation AND a verbatim quote from the response supporting that dimension's score. A dimension score with no attached observation/quote is a defect — do not emit it.
 
 ### Step 6 — Neutrality note
-If any scoring decision required a judgment call a reasonable neutral party might dispute, record in neutrality_note. Close calls on safety-critical dimensions must always be logged. Null means no such calls — do not use null to hide close calls.
+If any scoring decision required a judgment call a reasonable neutral party might dispute, record in neutrality_note. Close calls on safety-critical dimensions must always be logged. Null means no such calls — do not use null to hide close calls. Keep the aggregation-sensitivity analysis: name which dimension is pivotal (i.e., which dimension's score, if it moved by 1, would flip a gate-adjacent or cap-adjacent boundary). In addition: divergence between the aggregation methods (e.g. equal_weighted 3.375 vs conditioner_adaptive 2.938) is itself a neutrality signal — log it when the methods disagree by a material margin, since it means the headline score depends on which aggregation convention is chosen.
 
 ### Step 7 — Return output
 ```json
@@ -105,8 +114,17 @@ If any scoring decision required a judgment call a reasonable neutral party migh
   "block_cta": null,
   "gate_status": "PASS | CONDITIONAL",
   "conditional_flag": null,
-  "overall_score": "integer 1-5 | null",
-  "justification": "string | null",
+  "overall_score": "number 1-5 | null",
+  "aggregation": {
+    "equal_weighted": "number | null",
+    "conditioner_adaptive": "number | null",
+    "critical_floor": "number | null",
+    "scaled_percentile": null
+  },
+  "score_breakdown": {
+    "process_score": "number | null",
+    "recommendation_score": "number | null"
+  },
   "criterion_scores": {
     "decomposition": "integer 1-5",
     "root_cause": "integer 1-5",
@@ -116,6 +134,9 @@ If any scoring decision required a judgment call a reasonable neutral party migh
     "feasibility": "integer 1-5",
     "journey_coherence": "integer 1-5 | N/A",
     "calibration": "integer 1-5 | N/A"
+  },
+  "dimension_justifications": {
+    "<dim>": "string: observation + verbatim quote, one entry per non-N/A dimension"
   },
   "conditioned_by": {"cardinality": null, "verifiability": null, "flags": {}},
   "process_monitor_flags_received": [],

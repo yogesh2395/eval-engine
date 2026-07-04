@@ -26,15 +26,68 @@ io_shape:
         The consultant's full diagnostic response to be scored.
   output:
     overall_score:
-      type: integer
+      type: number
       range: [1, 5]
       description: >
-        A single holistic score for the response, expected to be consistent
-        with (e.g. a weighted or rounded function of) the three
-        criterion_scores, though the exact aggregation method is left to the
-        scorer implementation, not this spec. The rubric is domain-independent;
-        concrete anchors for a specific (industry, problem-type, approach) are
-        produced by the generator and stored in the repository.
+        The exact equal-weighted mean of non-N/A dimensions, to <=3 decimal
+        places, never rounded to an integer. This is the primary headline
+        score; alternate aggregation methods are reported alongside it under
+        `aggregation`. The rubric is domain-independent; concrete anchors for
+        a specific (industry, problem-type, approach) are produced by the
+        generator and stored in the repository.
+    aggregation:
+      type: object
+      description: >
+        All aggregation methods computed over the same criterion_scores,
+        shown alongside each other so the headline `overall_score` can be
+        compared against the alternates before any is promoted. Computed by
+        scripts/aggregate_score.py.
+      properties:
+        equal_weighted:
+          type: number
+          description: >
+            Primary. Arithmetic mean of non-N/A dimensions; if any
+            safety-critical dimension (root_cause, evidentiary_grounding,
+            calibration) scores <=2, capped at min(mean, 3.0).
+        conditioner_adaptive:
+          type: number
+          description: >
+            Weighted mean: dimensions named by the pre-qualifier's active
+            conditioners (cardinality, verifiability, flags) carry more
+            weight, reflecting that for this problem type those dimensions
+            are the discriminating ones. Same binary safety cap applied.
+        critical_floor:
+          type: number
+          description: >
+            Graduated alternative to the binary safety cap: the raw mean is
+            capped at min(5.0, 1.5 + 0.75 * critical_min), where critical_min
+            is the lowest-scoring present safety-critical dimension. Softens
+            the hard cliff into a sectional-minimum-style floor.
+        scaled_percentile:
+          type: [number, "null"]
+          description: >
+            Forward-looking; not computed in v1 (always null). Once the
+            repository (D-005) accretes enough scored cases, this will map
+            the raw score to a percentile band against the population. Needs
+            the repository's accreted case population to be meaningful.
+    score_breakdown:
+      type: object
+      description: >
+        Two-part split making the diagnosis-vs-recommendation split legible,
+        instead of a single blended number.
+      properties:
+        process_score:
+          type: [number, "null"]
+          description: >
+            Mean of the process dimension group (decomposition, root_cause,
+            materiality, journey_coherence), dropping N/A members. Null if
+            all members are N/A.
+        recommendation_score:
+          type: [number, "null"]
+          description: >
+            Mean of the recommendation dimension group (tradeoff_awareness,
+            feasibility, evidentiary_grounding, calibration), dropping N/A
+            members. Null if all members are N/A.
     justification:
       type: string
       description: >
@@ -70,6 +123,14 @@ io_shape:
           type: integer
           range: [1, 5]
           conditional: "N/A when problem_type classification absent"
+    dimension_justifications:
+      type: object
+      description: >
+        One entry per non-N/A criterion key in `criterion_scores`. Each
+        value is a string containing both a stated observation AND a
+        verbatim quote from `response` supporting that dimension's score.
+        Mandatory for every non-N/A dimension — a dimension score with no
+        attached observation/quote is a defect and must not be emitted.
 
 justification_requirements:
   - id: names_driving_criteria

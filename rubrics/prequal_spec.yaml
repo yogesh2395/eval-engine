@@ -30,6 +30,17 @@ io_shape:
       description: >
         The consultant's restatement or initial framing of the problem. Absence
         of an explicit framing is itself evidence for BLOCK.
+    interviewer_nudges:
+      type: array
+      items: string
+      nullable: true
+      description: >
+        Optional. Verbatim interviewer redirections/questions supplied by the
+        transcript-parser when the submission originated as a conversational
+        transcript (e.g., "So you can move on from revenue.", "What do you
+        think are the possible causes for this?"). Used to avoid penalizing
+        interviewer-directed branch pruning as a candidate defect. Absent or
+        empty for non-transcript submissions or transcripts without nudges.
   output:
     gate:
       type: enum
@@ -139,6 +150,19 @@ checks:
           gaps? Note: data sufficiency is NOT assessed as "is data objectively
           sufficient" (requires external ground truth — inadmissible). Only:
           "did the framing declare its data needs and gaps?"
+      - id: interviewer_directed_pruning
+        description: >
+          When evaluating question-substitution or premature branch-pruning
+          against optional input interviewer_nudges: a branch the candidate
+          drops at an interviewer's explicit redirection (e.g., "So you can
+          move on from revenue.") is NOT a question-substitution defect and
+          must not be cited as grounds for CONDITIONAL — the pruning is
+          interviewer-directed, not a candidate choice. Absent such a nudge,
+          unjustified self-pruning of a branch remains a legitimate basis for
+          CONDITIONAL as before. This sub-check only removes the false-positive
+          caused by interviewer-directed pruning; it does not suppress other
+          CONDITIONAL causes (e.g., undeclared hard constraints, missing
+          decision horizon), which are evaluated independently.
     gate_rules:
       BLOCK:
         conditions:

@@ -294,3 +294,123 @@ Tests: 227/227 passing throughout.
 4. **TODO.md is the task queue.** RL loop section now complete; Priorities 2–5 are live.
 
 5. `decisions_tracker.md` is authoritative. D-033 fully implemented.
+
+---
+
+## Session: Eval Engine Improvements — Units A–E (2026-07-04)
+
+Model discipline this session (user directive): Sonnet for mechanical agent work
+(coder/test-writer/committer), Opus reserved for the validator gate and the Unit E
+architecture audit. See memory feedback_model_cost_optimization.
+
+### Unit A — Scorer mechanics (D-038) — validator PASS, 237/237
+
+**What the c03 run exposed (verified from `logs/runs/20260629_170243/c03/scorer_output.json`):**
+the flat rounded `overall_score = 3` hid a stark split. Splitting the 8 dimensions:
+- process_score = mean(decomposition 5, root_cause 4, materiality 5, journey 4) = **4.5**
+- recommendation_score = mean(tradeoff 1, feasibility 2, evidentiary 3, calibration 3) = **2.25**
+The diagnosis was excellent; the recommendation was reflexive/gameable-blind. One integer erased it.
+
+**Aggregation mechanics (deterministic, `scripts/aggregate_score.py`):**
+| method | c03 | note |
+|---|---|---|
+| equal_weighted (headline) | 3.375 | raw mean, binary safety cap |
+| conditioner_adaptive | 2.938 | +1 weight per active conditioner (map mirrors prequal_spec); reflexive+gameable up-weight tradeoff/feasibility → falls below baseline. Weights 47/16. |
+| critical_floor | 3.375 | graduated ceiling min(5, 1.5+0.75·critical_min); c03 critical_min=3 → 3.75 ceiling, no bite |
+| scaled_percentile | null | stub — needs D-005 repository population |
+
+Verified fact: conditioner_adaptive is NEUTRAL — the weight map faithfully mirrors
+prequal_spec `downstream_anchor_shifts`; c03's own weak recommendation dims pull it down, not a
+rigged constant. Inference: this is the more honest headline for problem-type-conditioned scoring,
+but we keep equal_weighted primary until alternates are compared across ≥10 cases.
+
+**Per-dimension justification:** `dimension_justifications` now mandatory per non-N/A dimension
+(observation + verbatim quote). This closes the leak that let root_cause=4 pass unjustified in c03
+(the mechanical enforcement lands in Unit B / D-039).
+
+**Validator (Opus) verdict:** PASS on all 8 acceptance criteria, each reproduced by re-running —
+including the end-to-end seam check feeding the real c03 artifact through the new aggregator.
+
+### Unit B — Mechanical leakage checker in process-monitor (D-039) — validator PASS, 244/244
+
+**The leak, mechanically caught (verified):** Unit A made `dimension_justifications` mandatory;
+Unit B enforces it. Running `check_justification_completeness.py` on the ORIGINAL c03
+`scorer_output.json` (which predates the field) exits 1 and names all 8 dimensions as missing —
+proving the checker catches the exact defect (root_cause=4 unjustified) that slipped past the gate.
+
+**Semantics:** missing = (non-N/A scored dims) − (dims with non-empty justification). Empty string
+counts as missing; N/A dims excluded. Quote detection is advisory-only (never flips the verdict).
+
+**Integration honesty (validator-confirmed):** the checker is authoritative at the process-monitor
+stage — the agent reports its verdict and cannot override a mechanical FAIL. Because process-monitor
+is Read-only/no-Bash, the script runs as the stage wrapper and injects the verdict (falls back to
+`status: "unavailable"`). Verified fact: the runnable wrapper is documented **intent**, not built —
+it depends on the main-loop integration (still a RECOMMENDED TODO). This is a real gap for the Unit E
+audit, not a claim of completed wiring.
+
+### Unit C — Parser interviewer_nudges + speaker attribution (D-040) — validator PASS, 249/249
+
+**Root cause of the c03 false CONDITIONAL (verified from parse_output.json + prequal_output.json):**
+the parser mis-attributed the INTERVIEWER question "What do you think are the possible causes for
+this?" into `initial_framing` (candidate field) and dropped the interviewer directive "So you can
+move on from revenue." The pre-qualifier, blind to the directive, flagged the candidate for pruning
+the revenue branch "before it was data-justified" — but it was the interviewer who directed the move.
+
+**Fix:** (1) Step 0 speaker-attribution pass runs first; candidate-only fields exclude all interviewer
+turns. (2) New `interviewer_nudges` field captures interviewer redirections + questions (distinct from
+`confirmed_case_facts` data reveals). (3) Pre-qualifier consumes nudges: interviewer-directed pruning
+is not a candidate defect.
+
+**Neutrality discipline (validator-verified, the highest-risk point):** the exemption is scoped to
+"do not raise CONDITIONAL *on that basis*" — it is NOT "nudge present ⇒ auto-PASS." Other CONDITIONAL
+causes (undeclared "ignore reinsurance" constraint, missing decision horizon) are explicitly
+unaffected. So c03 would correctly shed the FALSE component while the legitimate CONDITIONAL causes
+(reinsurance/horizon) still stand — the gate is corrected, not weakened.
+
+**Verified vs inferred:** Verified — schema/rule text present in all three files, seam coherent, 249
+tests green. Inferred — the actual re-run gate outcome (CONDITIONAL-for-right-reason vs PASS) can only
+be confirmed once the nudge hand-off is wired into a runnable pipeline (still a RECOMMENDED TODO); this
+unit changes agent/spec contracts, not the runner.
+
+### Unit D — Persona/ideal/meta surfaces: design + stub only (D-041) — validator PASS, 249/249
+
+Per user directive (design + stub, not wired), created three STUB agents under specialist/:
+harsh-grader, generous-grader, persona-comparer — each a parametrized variant/consumer of the
+neutral post-scorer over the SAME 8 dimensions (no new dimensions invented), banner-marked
+"NOT WIRED INTO THE PIPELINE" in both frontmatter and body. Validator verified (grep) that nothing
+references them from any runnable pipeline file — the slots exist for later attachment only.
+
+D-041 also captures two backend-only design concepts, deliberately NOT built:
+- **Ideal Score Solution** with an explicit **overfitting guardrail**: do not auto-tune the engine
+  on an AI-generated ideal; the real RL loop is post-launch and human-driven (ideal → user
+  feedback → neutral efficacy eval → neutral adoption eval → main-engine improver).
+- **Dimension-sufficiency meta-check**: per-case Q1/Q2 metadata; a recurring missing dimension is
+  promoted to the fixer only after ≥10 end-to-end cases flag it critical.
+
+Design intent recorded so the architecture is decided; wiring waits until the neutral post-scorer
+validates across a meaningful sample (personas attach to a trusted baseline, not an unvalidated one).
+
+### Unit E — Compounding-loop self-audit (D-042) — Opus audit, self-fix verified
+
+Formalized the audit-before-push discipline into CLAUDE.md as loop steps 7 (knowledge-base update,
+now including CLAUDE.md itself) and 8 (workflow self-audit → `workflow_audit.md`). This is the
+"compounding AI on a loop architecture" requirement made mechanical: every chunk must name its gaps
+and either self-fix or rank them.
+
+**First audit's load-bearing findings (verified this session):**
+- The genuine compounding asset is the **deterministic mechanical checkers** (aggregate_score.py,
+  check_justification_completeness.py) — each converts a validator judgment call into a reproducible
+  gate, permanently shrinking the adjudication surface.
+- The principal brake is **un-runnable design debt**: Units A–C added agent/spec contracts that
+  cannot be exercised end-to-end because the main eval loop isn't integrated (eval_loop.py is still
+  the dev/parser loop). Three units carry "needs main-loop wiring."
+- **Confidence boundary (D-024):** this session verified aggregation math + checker semantics + spec
+  text + 249 tests + validator re-runs; it did NOT execution-verify the agents actually emitting the
+  new fields at runtime (the ~2.5-min/agent claude-CLI live checks were not run). Spec-verified ≠
+  run-verified — stated plainly, not glossed.
+
+**Self-fix proven:** the audit named that install_hooks.sh failed in a worktree and then fixed it
+(git rev-parse --git-common-dir); verified exit 0 installing from this worktree.
+
+**Top recommendation (feeds RECOMMENDED):** integrate the main eval loop — the single lever that
+turns the accumulated A–C contracts into runnable, self-verifying behavior and retires G1/G2.

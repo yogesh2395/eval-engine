@@ -8,19 +8,28 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOKS_SRC="$REPO_ROOT/scripts/hooks"
-HOOKS_DST="$REPO_ROOT/.git/hooks"
 
-if [[ ! -d "$HOOKS_DST" ]]; then
-    echo "ERROR: .git/hooks not found — run from a git repository root"
+# Resolve the shared hooks dir via the common git dir so this also works from a
+# git worktree (where .git is a file, not a directory). --git-common-dir points
+# at the main repo's .git for every worktree; hooks live there and are shared.
+COMMON_DIR="$(cd "$REPO_ROOT" && git rev-parse --git-common-dir 2>/dev/null || true)"
+if [[ -z "$COMMON_DIR" ]]; then
+    echo "ERROR: not inside a git repository — run from a checkout or worktree"
     exit 1
 fi
+case "$COMMON_DIR" in
+    /*) ;;                               # already absolute
+    *)  COMMON_DIR="$REPO_ROOT/$COMMON_DIR" ;;
+esac
+HOOKS_DST="$COMMON_DIR/hooks"
+mkdir -p "$HOOKS_DST"
 
 for hook in "$HOOKS_SRC"/*; do
     name="$(basename "$hook")"
     dst="$HOOKS_DST/$name"
     cp "$hook" "$dst"
     chmod +x "$dst"
-    echo "  installed: .git/hooks/$name"
+    echo "  installed: $dst"
 done
 
 echo ""

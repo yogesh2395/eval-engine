@@ -17,8 +17,10 @@ Keystone principle: build the scorer before any routing logic.
 3. coder implements only that change
 4. test-writer writes tests per criteria
 5. validator runs tests, scores PASS/FAIL with reasons
-6. FAIL → back to coder with findings. PASS → you review diff and commit.
-7. **After commit:** update TODO.md (mark done, add any corrections) and learnings.md (findings, errors, validator verdict, session commit log). This step is mandatory — not optional cleanup.
+6. FAIL → back to coder with findings. PASS → you review the diff.
+7. **Before the committer pushes — knowledge-base update (mandatory):** update decisions_tracker.md (new D-entry), TODO.md (mark done + any corrections), learnings.md (findings, errors, validator verdict, commit log), and CLAUDE.md itself when the loop/architecture changed. Not optional cleanup.
+8. **Before the committer pushes — workflow self-audit (mandatory, compounding loop):** audit the loop/architecture as it now stands — name any gaps the chunk exposed, self-fix the cheap ones in-session, and append ranked recommendations to `workflow_audit.md`. A loop that never inspects itself cannot compound; gaps (unwired stages, manual steps, un-runnable design debt) silently accrete otherwise.
+9. committer commits + pushes. (SHA-dependent notes in learnings.md are filled in immediately after.)
 
 ## Hard rules
 - No orchestration platform build. No model-router build.

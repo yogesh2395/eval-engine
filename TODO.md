@@ -89,8 +89,11 @@ stubs, loop self-audit). Plan: `.claude/plans/lucky-hopping-waterfall.md`.
       a runnable pipeline still needs main-loop wiring.
 - [x] **Unit D — Persona/ideal/meta stubs** (D-041): harsh/generous graders, persona-comparer
       (STUB, not wired); ideal-solution + dimension-sufficiency D-entries + overfitting guardrail.
-- [ ] **Unit E — Loop self-audit** (D-042): CLAUDE.md audit-before-push step; `workflow_audit.md`
-      session deliverable (gaps + self-fixes + ranked recs).
+- [x] **Unit E — Loop self-audit** (D-042): CLAUDE.md loop steps 7–8 (knowledge-base + workflow
+      self-audit before push); `workflow_audit.md` deliverable (gaps ranked, self-fixes, recs);
+      self-fixed `install_hooks.sh` to be worktree-aware (verified exit 0 from worktree).
+      Top audit finding → **integrate the main eval loop** (see RECOMMENDED below) to convert
+      Units A–C contracts into runnable behavior.
 
 ---
 

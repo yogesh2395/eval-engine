@@ -389,3 +389,28 @@ D-041 also captures two backend-only design concepts, deliberately NOT built:
 
 Design intent recorded so the architecture is decided; wiring waits until the neutral post-scorer
 validates across a meaningful sample (personas attach to a trusted baseline, not an unvalidated one).
+
+### Unit E — Compounding-loop self-audit (D-042) — Opus audit, self-fix verified
+
+Formalized the audit-before-push discipline into CLAUDE.md as loop steps 7 (knowledge-base update,
+now including CLAUDE.md itself) and 8 (workflow self-audit → `workflow_audit.md`). This is the
+"compounding AI on a loop architecture" requirement made mechanical: every chunk must name its gaps
+and either self-fix or rank them.
+
+**First audit's load-bearing findings (verified this session):**
+- The genuine compounding asset is the **deterministic mechanical checkers** (aggregate_score.py,
+  check_justification_completeness.py) — each converts a validator judgment call into a reproducible
+  gate, permanently shrinking the adjudication surface.
+- The principal brake is **un-runnable design debt**: Units A–C added agent/spec contracts that
+  cannot be exercised end-to-end because the main eval loop isn't integrated (eval_loop.py is still
+  the dev/parser loop). Three units carry "needs main-loop wiring."
+- **Confidence boundary (D-024):** this session verified aggregation math + checker semantics + spec
+  text + 249 tests + validator re-runs; it did NOT execution-verify the agents actually emitting the
+  new fields at runtime (the ~2.5-min/agent claude-CLI live checks were not run). Spec-verified ≠
+  run-verified — stated plainly, not glossed.
+
+**Self-fix proven:** the audit named that install_hooks.sh failed in a worktree and then fixed it
+(git rev-parse --git-common-dir); verified exit 0 installing from this worktree.
+
+**Top recommendation (feeds RECOMMENDED):** integrate the main eval loop — the single lever that
+turns the accumulated A–C contracts into runnable, self-verifying behavior and retires G1/G2.

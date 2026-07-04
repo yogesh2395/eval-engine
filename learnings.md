@@ -347,3 +347,27 @@ is Read-only/no-Bash, the script runs as the stage wrapper and injects the verdi
 `status: "unavailable"`). Verified fact: the runnable wrapper is documented **intent**, not built —
 it depends on the main-loop integration (still a RECOMMENDED TODO). This is a real gap for the Unit E
 audit, not a claim of completed wiring.
+
+### Unit C — Parser interviewer_nudges + speaker attribution (D-040) — validator PASS, 249/249
+
+**Root cause of the c03 false CONDITIONAL (verified from parse_output.json + prequal_output.json):**
+the parser mis-attributed the INTERVIEWER question "What do you think are the possible causes for
+this?" into `initial_framing` (candidate field) and dropped the interviewer directive "So you can
+move on from revenue." The pre-qualifier, blind to the directive, flagged the candidate for pruning
+the revenue branch "before it was data-justified" — but it was the interviewer who directed the move.
+
+**Fix:** (1) Step 0 speaker-attribution pass runs first; candidate-only fields exclude all interviewer
+turns. (2) New `interviewer_nudges` field captures interviewer redirections + questions (distinct from
+`confirmed_case_facts` data reveals). (3) Pre-qualifier consumes nudges: interviewer-directed pruning
+is not a candidate defect.
+
+**Neutrality discipline (validator-verified, the highest-risk point):** the exemption is scoped to
+"do not raise CONDITIONAL *on that basis*" — it is NOT "nudge present ⇒ auto-PASS." Other CONDITIONAL
+causes (undeclared "ignore reinsurance" constraint, missing decision horizon) are explicitly
+unaffected. So c03 would correctly shed the FALSE component while the legitimate CONDITIONAL causes
+(reinsurance/horizon) still stand — the gate is corrected, not weakened.
+
+**Verified vs inferred:** Verified — schema/rule text present in all three files, seam coherent, 249
+tests green. Inferred — the actual re-run gate outcome (CONDITIONAL-for-right-reason vs PASS) can only
+be confirmed once the nudge hand-off is wired into a runnable pipeline (still a RECOMMENDED TODO); this
+unit changes agent/spec contracts, not the runner.

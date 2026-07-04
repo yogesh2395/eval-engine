@@ -82,9 +82,11 @@ stubs, loop self-audit). Plan: `.claude/plans/lucky-hopping-waterfall.md`.
       section; validator justification-completeness FAIL criterion. Validator PASS (7/7); checker
       exits 1 on real c03 (all 8 dims missing), 244/244 tests. Note: runnable stage-wrapper is
       documented intent — needs main-loop wiring.
-- [ ] **Unit C — Parser interviewer_nudges + speaker attribution** (D-040):
+- [x] **Unit C — Parser interviewer_nudges + speaker attribution** (D-040):
       transcript-parser Step 0 attribution + `interviewer_nudges` field; pre-qualifier
-      non-penalty rule for interviewer-directed pruning.
+      non-penalty rule for interviewer-directed pruning (scoped, other CONDITIONAL causes
+      preserved). Validator PASS (7/7, incl. neutrality gate), 249/249 tests. Nudge hand-off in
+      a runnable pipeline still needs main-loop wiring.
 - [ ] **Unit D — Persona/ideal/meta stubs** (D-041): harsh/generous graders, persona-comparer
       (STUB, not wired); ideal-solution + dimension-sufficiency D-entries + overfitting guardrail.
 - [ ] **Unit E — Loop self-audit** (D-042): CLAUDE.md audit-before-push step; `workflow_audit.md`

@@ -68,6 +68,28 @@
 
 ---
 
+## Eval Engine Improvements session (2026-07-04) — Units A–E
+
+Source: user improvement brief (scorer output, monitor leakage check, parser nudges, persona
+stubs, loop self-audit). Plan: `.claude/plans/lucky-hopping-waterfall.md`.
+
+- [x] **Unit A — Scorer mechanics** (D-038): decimal `overall_score`; `score_breakdown`
+      {process 4.5 / recommendation 2.25 on c03}; `aggregation` {equal_weighted 3.375,
+      conditioner_adaptive 2.938, critical_floor 3.375, scaled_percentile stub}; mandatory
+      `dimension_justifications`. Validator PASS (8/8), 237/237 tests.
+- [ ] **Unit B — Mechanical leakage checker in process-monitor** (D-039):
+      `scripts/check_justification_completeness.py`; process-monitor `design_execution_leakage`
+      section; validator justification-completeness FAIL criterion.
+- [ ] **Unit C — Parser interviewer_nudges + speaker attribution** (D-040):
+      transcript-parser Step 0 attribution + `interviewer_nudges` field; pre-qualifier
+      non-penalty rule for interviewer-directed pruning.
+- [ ] **Unit D — Persona/ideal/meta stubs** (D-041): harsh/generous graders, persona-comparer
+      (STUB, not wired); ideal-solution + dimension-sufficiency D-entries + overfitting guardrail.
+- [ ] **Unit E — Loop self-audit** (D-042): CLAUDE.md audit-before-push step; `workflow_audit.md`
+      session deliverable (gaps + self-fixes + ranked recs).
+
+---
+
 ## HOLD
 
 ### Priority 5 — Model seam

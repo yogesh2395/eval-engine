@@ -294,3 +294,39 @@ Tests: 227/227 passing throughout.
 4. **TODO.md is the task queue.** RL loop section now complete; Priorities 2–5 are live.
 
 5. `decisions_tracker.md` is authoritative. D-033 fully implemented.
+
+---
+
+## Session: Eval Engine Improvements — Units A–E (2026-07-04)
+
+Model discipline this session (user directive): Sonnet for mechanical agent work
+(coder/test-writer/committer), Opus reserved for the validator gate and the Unit E
+architecture audit. See memory feedback_model_cost_optimization.
+
+### Unit A — Scorer mechanics (D-038) — validator PASS, 237/237
+
+**What the c03 run exposed (verified from `logs/runs/20260629_170243/c03/scorer_output.json`):**
+the flat rounded `overall_score = 3` hid a stark split. Splitting the 8 dimensions:
+- process_score = mean(decomposition 5, root_cause 4, materiality 5, journey 4) = **4.5**
+- recommendation_score = mean(tradeoff 1, feasibility 2, evidentiary 3, calibration 3) = **2.25**
+The diagnosis was excellent; the recommendation was reflexive/gameable-blind. One integer erased it.
+
+**Aggregation mechanics (deterministic, `scripts/aggregate_score.py`):**
+| method | c03 | note |
+|---|---|---|
+| equal_weighted (headline) | 3.375 | raw mean, binary safety cap |
+| conditioner_adaptive | 2.938 | +1 weight per active conditioner (map mirrors prequal_spec); reflexive+gameable up-weight tradeoff/feasibility → falls below baseline. Weights 47/16. |
+| critical_floor | 3.375 | graduated ceiling min(5, 1.5+0.75·critical_min); c03 critical_min=3 → 3.75 ceiling, no bite |
+| scaled_percentile | null | stub — needs D-005 repository population |
+
+Verified fact: conditioner_adaptive is NEUTRAL — the weight map faithfully mirrors
+prequal_spec `downstream_anchor_shifts`; c03's own weak recommendation dims pull it down, not a
+rigged constant. Inference: this is the more honest headline for problem-type-conditioned scoring,
+but we keep equal_weighted primary until alternates are compared across ≥10 cases.
+
+**Per-dimension justification:** `dimension_justifications` now mandatory per non-N/A dimension
+(observation + verbatim quote). This closes the leak that let root_cause=4 pass unjustified in c03
+(the mechanical enforcement lands in Unit B / D-039).
+
+**Validator (Opus) verdict:** PASS on all 8 acceptance criteria, each reproduced by re-running —
+including the end-to-end seam check feeding the real c03 artifact through the new aggregator.

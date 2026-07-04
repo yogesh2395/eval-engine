@@ -604,3 +604,132 @@ class TestAggregateFailures:
             f"worst_category must be 'Market Entry' (0% pass rate vs "
             f"Profitability 100%); got {main_run['worst_category']!r}"
         )
+
+
+# ===========================================================================
+# Group 4: TestAggregateScore
+# ===========================================================================
+
+class TestAggregateScore:
+    """
+    Acceptance criteria for scripts/aggregate_score.py.
+
+    The c03 SELF-CHECK vector (Unit A plan):
+        {decomposition:5, root_cause:4, materiality:5, evidentiary_grounding:3,
+         tradeoff_awareness:1, feasibility:2, journey_coherence:4, calibration:3}
+        conditioned_by = {cardinality:"multiple", verifiability:"indirect",
+                           flags:{distributional:false, intractable:false,
+                                  reflexive:true, gameable:true}}
+    """
+
+    @pytest.fixture(scope="class")
+    def asc(self):
+        return _import_script("aggregate_score")
+
+    @pytest.fixture(scope="class")
+    def c03_scores(self):
+        return {
+            "decomposition": 5,
+            "root_cause": 4,
+            "materiality": 5,
+            "evidentiary_grounding": 3,
+            "tradeoff_awareness": 1,
+            "feasibility": 2,
+            "journey_coherence": 4,
+            "calibration": 3,
+        }
+
+    @pytest.fixture(scope="class")
+    def c03_conditioned_by(self):
+        return {
+            "cardinality": "multiple",
+            "verifiability": "indirect",
+            "flags": {
+                "distributional": False,
+                "intractable": False,
+                "reflexive": True,
+                "gameable": True,
+            },
+        }
+
+    def test_file_exists(self):
+        assert (SCRIPTS_DIR / "aggregate_score.py").is_file(), (
+            f"scripts/aggregate_score.py not found at {SCRIPTS_DIR / 'aggregate_score.py'}"
+        )
+
+    def test_equal_weighted_c03(self, asc, c03_scores):
+        result = asc.equal_weighted(c03_scores)
+        assert result == 3.375, f"equal_weighted(c03) must be 3.375; got {result}"
+
+    def test_conditioner_adaptive_c03(self, asc, c03_scores, c03_conditioned_by):
+        result = asc.conditioner_adaptive(c03_scores, c03_conditioned_by)
+        assert result == 2.938, (
+            f"conditioner_adaptive(c03) must round to 2.938 (47/16 = 2.9375); got {result}"
+        )
+
+    def test_critical_floor_c03(self, asc, c03_scores):
+        result = asc.critical_floor(c03_scores)
+        assert result == 3.375, (
+            f"critical_floor(c03) must be 3.375 (critical_min=3 -> ceiling 3.75, "
+            f"raw mean 3.375 < ceiling); got {result}"
+        )
+
+    def test_process_score_c03(self, asc, c03_scores):
+        breakdown = asc.score_breakdown(c03_scores)
+        assert breakdown["process_score"] == 4.5, (
+            f"process_score(c03) must be 4.5; got {breakdown['process_score']}"
+        )
+
+    def test_recommendation_score_c03(self, asc, c03_scores):
+        breakdown = asc.score_breakdown(c03_scores)
+        assert breakdown["recommendation_score"] == 2.25, (
+            f"recommendation_score(c03) must be 2.25; got {breakdown['recommendation_score']}"
+        )
+
+    def test_scaled_percentile_returns_none(self, asc, c03_scores):
+        result = asc.scaled_percentile(c03_scores)
+        assert result is None, (
+            f"scaled_percentile is forward-looking and must return None in v1; got {result}"
+        )
+
+    def test_aggregate_all_scaled_percentile_is_none(self, asc, c03_scores, c03_conditioned_by):
+        result = asc.aggregate_all(c03_scores, c03_conditioned_by)
+        assert result["scaled_percentile"] is None, (
+            f"aggregate_all(c03)['scaled_percentile'] must be None; got {result['scaled_percentile']}"
+        )
+
+    def test_critical_floor_ceiling_at_critical_min_1(self, asc):
+        # A safety-critical dim scored 1 -> ceiling = 1.5 + 0.75*1 = 2.25.
+        scores = {
+            "decomposition": 5,
+            "root_cause": 1,
+            "materiality": 5,
+            "evidentiary_grounding": 5,
+            "tradeoff_awareness": 5,
+            "feasibility": 5,
+            "journey_coherence": 5,
+            "calibration": 5,
+        }
+        result = asc.critical_floor(scores)
+        assert result == 2.25, (
+            f"critical_floor with critical_min=1 must cap at 2.25 "
+            f"(1.5 + 0.75*1); got {result}"
+        )
+
+    def test_binary_cap_ceiling_at_critical_min_1(self, asc):
+        # Same vector: binary_cap_ceiling / equal_weighted must show the
+        # hard cliff cap at 3.0 (since root_cause=1 <= 2).
+        scores = {
+            "decomposition": 5,
+            "root_cause": 1,
+            "materiality": 5,
+            "evidentiary_grounding": 5,
+            "tradeoff_awareness": 5,
+            "feasibility": 5,
+            "journey_coherence": 5,
+            "calibration": 5,
+        }
+        ceiling = asc.binary_cap_ceiling(scores)
+        assert ceiling == 3.0, f"binary_cap_ceiling must be 3.0 when a safety-critical dim <=2; got {ceiling}"
+        result = asc.equal_weighted(scores)
+        assert result == 3.0, f"equal_weighted must be capped at 3.0; got {result}"

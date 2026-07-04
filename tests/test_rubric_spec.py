@@ -471,7 +471,7 @@ class TestIOShape(unittest.TestCase):
             f"io_shape.input should have exactly prompt+response, got {list(input_shape.keys())}",
         )
 
-    def test_output_has_overall_score_integer_1_to_5(self):
+    def test_output_has_overall_score_number_1_to_5(self):
         output_shape = self.io_shape.get("output")
         self.assertIsNotNone(output_shape, "io_shape.output is missing")
 
@@ -479,8 +479,8 @@ class TestIOShape(unittest.TestCase):
         self.assertIsNotNone(overall_score, "io_shape.output missing `overall_score`")
         self.assertEqual(
             overall_score.get("type"),
-            "integer",
-            "io_shape.output.overall_score.type must be 'integer'",
+            "number",
+            "io_shape.output.overall_score.type must be 'number'",
         )
         self.assertEqual(
             overall_score.get("range"),
@@ -534,13 +534,21 @@ class TestIOShape(unittest.TestCase):
                     f"got {prop.get('range')}",
                 )
 
-    def test_output_has_exactly_three_top_level_fields(self):
+    def test_output_has_exactly_expected_top_level_fields(self):
         output_shape = self.io_shape.get("output")
         self.assertEqual(
             sorted(output_shape.keys()),
-            sorted(["overall_score", "justification", "criterion_scores"]),
-            f"io_shape.output should have exactly overall_score+justification+"
-            f"criterion_scores, got {list(output_shape.keys())}",
+            sorted([
+                "overall_score",
+                "aggregation",
+                "score_breakdown",
+                "criterion_scores",
+                "dimension_justifications",
+                "justification",
+            ]),
+            f"io_shape.output should have exactly overall_score+aggregation+"
+            f"score_breakdown+criterion_scores+dimension_justifications+"
+            f"justification, got {list(output_shape.keys())}",
         )
 
 

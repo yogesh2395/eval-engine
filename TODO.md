@@ -77,9 +77,11 @@ stubs, loop self-audit). Plan: `.claude/plans/lucky-hopping-waterfall.md`.
       {process 4.5 / recommendation 2.25 on c03}; `aggregation` {equal_weighted 3.375,
       conditioner_adaptive 2.938, critical_floor 3.375, scaled_percentile stub}; mandatory
       `dimension_justifications`. Validator PASS (8/8), 237/237 tests.
-- [ ] **Unit B — Mechanical leakage checker in process-monitor** (D-039):
+- [x] **Unit B — Mechanical leakage checker in process-monitor** (D-039):
       `scripts/check_justification_completeness.py`; process-monitor `design_execution_leakage`
-      section; validator justification-completeness FAIL criterion.
+      section; validator justification-completeness FAIL criterion. Validator PASS (7/7); checker
+      exits 1 on real c03 (all 8 dims missing), 244/244 tests. Note: runnable stage-wrapper is
+      documented intent — needs main-loop wiring.
 - [ ] **Unit C — Parser interviewer_nudges + speaker attribution** (D-040):
       transcript-parser Step 0 attribution + `interviewer_nudges` field; pre-qualifier
       non-penalty rule for interviewer-directed pruning.

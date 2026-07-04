@@ -330,3 +330,20 @@ but we keep equal_weighted primary until alternates are compared across ≥10 ca
 
 **Validator (Opus) verdict:** PASS on all 8 acceptance criteria, each reproduced by re-running —
 including the end-to-end seam check feeding the real c03 artifact through the new aggregator.
+
+### Unit B — Mechanical leakage checker in process-monitor (D-039) — validator PASS, 244/244
+
+**The leak, mechanically caught (verified):** Unit A made `dimension_justifications` mandatory;
+Unit B enforces it. Running `check_justification_completeness.py` on the ORIGINAL c03
+`scorer_output.json` (which predates the field) exits 1 and names all 8 dimensions as missing —
+proving the checker catches the exact defect (root_cause=4 unjustified) that slipped past the gate.
+
+**Semantics:** missing = (non-N/A scored dims) − (dims with non-empty justification). Empty string
+counts as missing; N/A dims excluded. Quote detection is advisory-only (never flips the verdict).
+
+**Integration honesty (validator-confirmed):** the checker is authoritative at the process-monitor
+stage — the agent reports its verdict and cannot override a mechanical FAIL. Because process-monitor
+is Read-only/no-Bash, the script runs as the stage wrapper and injects the verdict (falls back to
+`status: "unavailable"`). Verified fact: the runnable wrapper is documented **intent**, not built —
+it depends on the main-loop integration (still a RECOMMENDED TODO). This is a real gap for the Unit E
+audit, not a claim of completed wiring.

@@ -733,3 +733,114 @@ class TestAggregateScore:
         assert ceiling == 3.0, f"binary_cap_ceiling must be 3.0 when a safety-critical dim <=2; got {ceiling}"
         result = asc.equal_weighted(scores)
         assert result == 3.0, f"equal_weighted must be capped at 3.0; got {result}"
+
+
+# ===========================================================================
+# Group 5: TestJustificationCompleteness
+# ===========================================================================
+
+class TestJustificationCompleteness:
+    """
+    Acceptance criteria for scripts/check_justification_completeness.py.
+
+    Uses the importable check_completeness() function directly — no
+    subprocess needed. All fixtures are inline/synthetic (no dependency on
+    logs/runs, which is gitignored).
+    """
+
+    @pytest.fixture(scope="class")
+    def cjc(self):
+        return _import_script("check_justification_completeness")
+
+    def test_file_exists(self):
+        assert (SCRIPTS_DIR / "check_justification_completeness.py").is_file(), (
+            f"scripts/check_justification_completeness.py not found at "
+            f"{SCRIPTS_DIR / 'check_justification_completeness.py'}"
+        )
+
+    def test_complete_case_is_pass_with_no_missing(self, cjc):
+        criterion_scores = {
+            "decomposition": 5,
+            "root_cause": 4,
+            "materiality": 5,
+        }
+        dimension_justifications = {
+            "decomposition": 'Candidate said: "I would split this into revenue and cost."',
+            "root_cause": 'Candidate cited: "claims frequency rose 12% YoY."',
+            "materiality": 'Candidate quantified: "this is $8M of the $10M gap."',
+        }
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "PASS", f"expected PASS; got {result}"
+        assert result["missing"] == [], f"expected no missing dims; got {result['missing']}"
+
+    def test_missing_root_cause_is_fail(self, cjc):
+        criterion_scores = {
+            "decomposition": 5,
+            "root_cause": 4,
+            "materiality": 5,
+        }
+        dimension_justifications = {
+            "decomposition": 'Candidate said: "I would split this into revenue and cost."',
+            "materiality": 'Candidate quantified: "this is $8M of the $10M gap."',
+            # root_cause deliberately absent — this is the c03 leak.
+        }
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "FAIL", f"expected FAIL; got {result}"
+        assert "root_cause" in result["missing"], (
+            f"expected 'root_cause' in missing; got {result['missing']}"
+        )
+
+    def test_empty_string_justification_counts_as_missing(self, cjc):
+        criterion_scores = {"root_cause": 4}
+        dimension_justifications = {"root_cause": "   "}
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "FAIL", f"expected FAIL; got {result}"
+        assert result["missing"] == ["root_cause"], (
+            f"expected ['root_cause']; got {result['missing']}"
+        )
+
+    def test_na_dimension_does_not_require_justification(self, cjc):
+        criterion_scores = {
+            "root_cause": 4,
+            "journey_coherence": "N/A",
+        }
+        dimension_justifications = {
+            "root_cause": 'Candidate cited: "claims frequency rose 12%."',
+        }
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "PASS", f"expected PASS; got {result}"
+        assert "journey_coherence" not in result["missing"], (
+            f"N/A dim must not appear in missing; got {result['missing']}"
+        )
+
+    def test_old_shape_with_no_justifications_fails_naming_all_eight(self, cjc):
+        criterion_scores = {
+            "decomposition": 5,
+            "root_cause": 4,
+            "materiality": 5,
+            "evidentiary_grounding": 3,
+            "tradeoff_awareness": 1,
+            "feasibility": 2,
+            "journey_coherence": 4,
+            "calibration": 3,
+        }
+        dimension_justifications = {}
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "FAIL", f"expected FAIL; got {result}"
+        assert result["missing"] == sorted(criterion_scores.keys()), (
+            f"expected all 8 dims named as missing; got {result['missing']}"
+        )
+        assert len(result["missing"]) == 8
+
+    def test_quote_warning_is_advisory_and_does_not_flip_pass_to_fail(self, cjc):
+        criterion_scores = {"root_cause": 4}
+        dimension_justifications = {
+            "root_cause": "Candidate cited claims frequency rose without a verbatim quote",
+        }
+        result = cjc.check_completeness(criterion_scores, dimension_justifications)
+        assert result["status"] == "PASS", (
+            f"a missing quote is advisory only and must not cause FAIL; got {result}"
+        )
+        assert "root_cause" in result["quote_warnings"], (
+            f"expected 'root_cause' in quote_warnings; got {result['quote_warnings']}"
+        )
